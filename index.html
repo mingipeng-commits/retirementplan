@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>退休計算機</title>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-light: #64748b;
+    --success: #16a34a;
+    --warning: #d97706;
+    --danger: #dc2626;
+    --accent: #7c3aed;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  h1 {
+    text-align: center;
+    font-size: 1.8rem;
+    margin: 20px 0 10px;
+    color: var(--primary-dark);
+  }
+  .subtitle { text-align: center; color: var(--text-light); margin-bottom: 30px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .card h2 {
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--primary);
+    color: var(--primary-dark);
+  }
+  .card h3 {
+    font-size: 1rem;
+    margin: 16px 0 8px;
+    color: var(--accent);
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .form-group { display: flex; flex-direction: column; }
+  .form-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text-light);
+  }
+  .form-group input, .form-group select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  }
+  .hint { font-size: 0.75rem; color: var(--text-light); margin-top: 2px; }
+  .btn {
+    display: inline-block;
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-sm { padding: 6px 14px; font-size: 0.85rem; }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-center { text-align: center; margin: 20px 0; }
+  .derived-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .derived-item {
+    background: #f1f5f9;
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+  .derived-item .label { font-size: 0.8rem; color: var(--text-light); }
+  .derived-item .value { font-size: 1.1rem; font-weight: 700; color: var(--primary-dark); }
+  .investment-row {
+    display: flex;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .investment-row .form-group { flex: 1; min-width: 140px; }
+  .investment-row .btn { flex-shrink: 0; align-self: flex-end; margin-bottom: 2px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 12px;
+  }
+  th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+  th { background: #f1f5f9; font-weight: 600; color: var(--text-light); position: sticky; top: 0; }
+  td:first-child, th:first-child { text-align: center; }
+  .table-wrap { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .summary-item {
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+  .summary-item .label { font-size: 0.8rem; color: var(--text-light); }
+  .summary-item .value { font-size: 1.3rem; font-weight: 700; color: var(--primary-dark); }
+  .summary-item.accent { background: linear-gradient(135deg, #faf5ff, #ede9fe); }
+  .summary-item.accent .value { color: var(--accent); }
+  .summary-item.green { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
+  .summary-item.green .value { color: var(--success); }
+  .error-msg { color: var(--danger); font-size: 0.9rem; margin: 8px 0; }
+  .hidden { display: none; }
+  #results { display: none; }
+  .radio-group { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0; }
+  .radio-group label { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; font-weight: normal; color: var(--text); }
+  .radio-group input[type="radio"] { accent-color: var(--primary); }
+  .strategy-desc { font-size: 0.8rem; color: var(--text-light); margin: 4px 0 12px 0; }
+  @media (max-width: 600px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .investment-row { flex-direction: column; }
+    table { font-size: 0.75rem; }
+    th, td { padding: 6px 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>退休計算機</h1>
+  <p class="subtitle">模擬被動式 ETF 指數基金的退休金積累與分配計畫</p>
+
+  <!-- 基本設定 -->
+  <div class="card">
+    <h2>基本設定</h2>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>出生年月日 (BD)</label>
+        <input type="date" id="birthDate" value="1990-01-15">
+      </div>
+      <div class="form-group">
+        <label>使用計算機的日期 (TD)</label>
+        <input type="date" id="calcDate">
+      </div>
+      <div class="form-group">
+        <label>預計退休年齡 (RA)</label>
+        <input type="number" id="retirementAge" value="60" min="40" max="70" step="1">
+        <span class="hint">40 ~ 70 歲</span>
+      </div>
+      <div class="form-group">
+        <label>預期壽命 (LS)</label>
+        <input type="number" id="lifeExpectancy" value="85" min="50" max="100" step="1">
+        <span class="hint">50 ~ 100 歲</span>
+      </div>
+      <div class="form-group">
+        <label>年 CPI (%)</label>
+        <input type="number" id="annualCPI" value="2" min="0" max="10" step="0.1">
+        <span class="hint">0% ~ 10%，預設 2%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module A: 積累 -->
+  <div class="card">
+    <h2>Module A — 積累</h2>
+
+    <h3>一次性投入</h3>
+    <div id="lumpSumList"></div>
+    <button class="btn btn-sm btn-success" onclick="addLumpSum()">+ 新增一筆</button>
+
+    <h3>每月定期定額投入</h3>
+    <p class="hint" style="margin-bottom:8px;">購買期間：計算當日起至退休日止</p>
+    <div id="dcaList"></div>
+    <button class="btn btn-sm btn-success" onclick="addDCA()">+ 新增一筆</button>
+  </div>
+
+  <!-- Module B: 分配 -->
+  <div class="card">
+    <h2>Module B — 分配</h2>
+
+    <h3>退休當下歸戶之 ETF 商品</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>ETF 名稱</label>
+        <input type="text" id="retETFName" value="0050" placeholder="例: 0050">
+      </div>
+      <div class="form-group">
+        <label>年 CAGR (%)</label>
+        <input type="number" id="retETFCagr" value="8" step="0.1">
+      </div>
+      <div class="form-group">
+        <label>年配息率 LAIR (%)</label>
+        <input type="number" id="retETFLair" value="4" step="0.1">
+      </div>
+      <div class="form-group">
+        <label>配息頻率</label>
+        <select id="retETFFreq">
+          <option value="semi-annual">半年配 (2月/8月)</option>
+          <option value="quarterly">季配 (3/6/9/12月)</option>
+        </select>
+      </div>
+    </div>
+
+    <h3>其他退休資產</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>新制勞退一次領出</label>
+        <input type="number" id="laborPension" value="0" min="0" step="10000">
+        <span class="hint">固定在滿 60 歲時提領</span>
+      </div>
+      <div class="form-group">
+        <label>其他可歸戶資產</label>
+        <input type="number" id="otherAssets" value="0" min="0" step="10000">
+      </div>
+    </div>
+
+    <h3>提領策略</h3>
+    <div class="radio-group">
+      <label><input type="radio" name="strategy" value="fixed-rate" checked onchange="onStrategyChange()">固定比率提領</label>
+      <label><input type="radio" name="strategy" value="increasing-rate" onchange="onStrategyChange()">遞增比率提領</label>
+      <label><input type="radio" name="strategy" value="constant-pv" onchange="onStrategyChange()">等現值提領</label>
+    </div>
+    <div id="strategyDesc" class="strategy-desc">每年年初固定領出資產的 x%，壽命結束當下未領出的資產為遺產。</div>
+    <div id="withdrawalRateGroup" class="form-grid" style="max-width:300px;">
+      <div class="form-group">
+        <label>年提領比率 x (%)</label>
+        <input type="number" id="withdrawalRate" value="4" min="1" max="12" step="0.5">
+        <span class="hint">1% ~ 12%</span>
+      </div>
+    </div>
+
+    <h3>國家老年給付（月付）</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>勞保老年年金（月付）</label>
+        <input type="number" id="laborInsurance" value="20000" min="0" step="1000">
+      </div>
+      <div class="form-group">
+        <label>國民年金（月付）</label>
+        <input type="number" id="nationalPension" value="5000" min="0" step="100">
+      </div>
+    </div>
+  </div>
+
+  <!-- 計算按鈕 -->
+  <div class="btn-center">
+    <button class="btn btn-primary" onclick="runCalculation()" style="font-size:1.1rem; padding: 14px 48px;">
+      開始計算
+    </button>
+  </div>
+  <div id="errorBox" class="error-msg" style="text-align:center;"></div>
+
+  <!-- 計算結果 -->
+  <div id="results">
+    <div class="card">
+      <h2>衍生計算結果</h2>
+      <div class="derived-grid" id="derivedGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2>Module A — 積累結果</h2>
+      <div class="summary-grid" id="accSummary"></div>
+    </div>
+
+    <div class="card">
+      <h2>Module B — 分配結果</h2>
+      <div class="summary-grid" id="distSummary"></div>
+      <h3>各年提領明細</h3>
+      <div class="table-wrap">
+        <table id="distTable">
+          <thead>
+            <tr>
+              <th>年</th>
+              <th>年初提領</th>
+              <th>PV@退休</th>
+              <th>PV@今日</th>
+              <th>ETF 增長</th>
+              <th>剩餘資產</th>
+              <th>月可用</th>
+              <th>月PV@今日</th>
+              <th>月PV@60</th>
+            </tr>
+          </thead>
+          <tbody id="distTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Calculation Engine (ported from TypeScript)
+// ============================================================
+
+// --- basicSettings ---
+function validateBasicSettings(s) {
+  var errors = [];
+  if (s.retirementAge < 40 || s.retirementAge > 70) errors.push('退休年齡必須在 40 至 70 歲之間');
+  if (s.lifeExpectancy < 50 || s.lifeExpectancy > 100) errors.push('預期壽命必須在 50 至 100 歲之間');
+  if (s.annualCPI < 0 || s.annualCPI > 0.10) errors.push('年 CPI 必須在 0% 至 10% 之間');
+  if (s.birthDate >= s.calculationDate) errors.push('出生日期必須早於計算日期');
+  if (s.lifeExpectancy <= s.retirementAge) errors.push('預期壽命必須大於退休年齡');
+  return errors;
+}
+
+function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
+
+function calcMonthsDiff(startDate, endDate) {
+  var sY = startDate.getFullYear(), sM = startDate.getMonth(), sD = startDate.getDate();
+  var eY = endDate.getFullYear(), eM = endDate.getMonth(), eD = endDate.getDate();
+  var full = (eY - sY) * 12 + (eM - sM);
+  if (eD >= sD) {
+    var dim = new Date(eY, eM + 1, 0).getDate();
+    return round2(full + (eD - sD) / dim);
+  } else {
+    full -= 1;
+    var dip = new Date(eY, eM, 0).getDate();
+    var rem = (dip - sD) + eD;
+    return round2(full + rem / dip);
+  }
+}
+
+function addYearsToDate(d, y) { var r = new Date(d); r.setFullYear(r.getFullYear() + y); return r; }
+function annualToMonthlyRate(a) { return Math.pow(1 + a, 1/12) - 1; }
+
+function calculateDerived(s) {
+  var errors = validateBasicSettings(s);
+  if (errors.length > 0) throw new Error(errors.join('\n'));
+  var retDate = addYearsToDate(s.birthDate, s.retirementAge);
+  var lifeEnd = addYearsToDate(s.birthDate, s.lifeExpectancy);
+  var totalAgeM = calcMonthsDiff(s.birthDate, s.calculationDate);
+  var aY = Math.floor(totalAgeM / 12);
+  var aM = round2(totalAgeM % 12);
+  var ip = calcMonthsDiff(s.calculationDate, retDate);
+  var dp = calcMonthsDiff(retDate, lifeEnd);
+  var mcpi = annualToMonthlyRate(s.annualCPI);
+  return {
+    ageYears: aY, ageMonths: aM, ageDescription: aY + '年 ' + aM + '月',
+    investmentPeriodMonths: ip, distributionPeriodMonths: dp, monthlyCPI: mcpi,
+    retirementDate: retDate, lifeEndDate: lifeEnd
+  };
+}
+
+// --- etfModel ---
+var BUY_FEE_RATE = 0.001425;
+var SELL_FEE_RATE = 0.001425 + 0.001;
+
+function calculateBuyAmount(amt) { return amt * (1 - BUY_FEE_RATE); }
+function calculateSellProceeds(amt) { return amt * (1 - SELL_FEE_RATE); }
+
+function isDividendMonth(m, freq) {
+  if (freq === 'semi-annual') return m === 2 || m === 8;
+  return m === 3 || m === 6 || m === 9 || m === 12;
+}
+
+function getSingleDividendRate(etf) {
+  return etf.dividendFrequency === 'semi-annual' ? etf.annualLAIR / 2 : etf.annualLAIR / 4;
+}
+
+function simulateMonthGrowth(principal, etf, calMonth) {
+  var mcagr = annualToMonthlyRate(etf.annualCAGR);
+  var div = 0;
+  if (isDividendMonth(calMonth, etf.dividendFrequency)) {
+    div = principal * getSingleDividendRate(etf);
+  }
+  var grown = principal * (1 + mcagr);
+  return { newPrincipal: grown + div, dividend: div };
+}
+
+// --- moduleA ---
+function simulateLumpSum(inv, settings, derived) {
+  var p = calculateBuyAmount(inv.amount);
+  var total = Math.floor(derived.investmentPeriodMonths);
+  var cm = settings.calculationDate.getMonth() + 1;
+  for (var i = 0; i < total; i++) {
+    var r = simulateMonthGrowth(p, inv.etf, cm);
+    p = r.newPrincipal;
+    cm++; if (cm > 12) cm = 1;
+  }
+  return p;
+}
+
+function simulateDCA(inv, settings, derived) {
+  var total = Math.floor(derived.investmentPeriodMonths);
+  var p = 0;
+  var cm = settings.calculationDate.getMonth() + 1;
+  for (var i = 0; i < total; i++) {
+    p += calculateBuyAmount(inv.monthlyAmount);
+    var r = simulateMonthGrowth(p, inv.etf, cm);
+    p = r.newPrincipal;
+    cm++; if (cm > 12) cm = 1;
+  }
+  return p;
+}
+
+function calculateAccumulation(accS, basicS, derived) {
+  var ls = 0, dc = 0;
+  for (var i = 0; i < accS.lumpSumInvestments.length; i++) ls += simulateLumpSum(accS.lumpSumInvestments[i], basicS, derived);
+  for (var i = 0; i < accS.dcaInvestments.length; i++) dc += simulateDCA(accS.dcaInvestments[i], basicS, derived);
+  return { lumpSumTotal: ls, dcaTotal: dc, totalAtRetirement: ls + dc };
+}
+
+// --- moduleB ---
+function calculateTotalRetirementAssets(accR, distS) {
+  var t = accR.totalAtRetirement + distS.laborPensionLumpSum + distS.otherAssets;
+  return calculateBuyAmount(t);
+}
+
+function simulateYear(assets, etf, retMonth) {
+  var cm = retMonth, start = assets;
+  for (var m = 0; m < 12; m++) {
+    var r = simulateMonthGrowth(assets, etf, cm);
+    assets = r.newPrincipal;
+    cm++; if (cm > 12) cm = 1;
+  }
+  return { assets: assets, growth: assets - start };
+}
+
+function buildRow(year, netW, assets, etfG, mcpi, ip, labIns, natPen) {
+  var monthW = netW / 12;
+  var monthAvail = monthW + labIns + natPen;
+  var mfR = (year - 1) * 12;
+  var mfN = ip + mfR;
+  return {
+    year: year,
+    withdrawalAmount: round2(netW),
+    pvAtRetirement: round2(netW / Math.pow(1 + mcpi, mfR)),
+    pvAtNow: round2(netW / Math.pow(1 + mcpi, mfN)),
+    remainingAssets: round2(assets),
+    etfGrowth: round2(etfG),
+    monthlyAvailable: round2(monthAvail),
+    monthlyAvailablePVNow: round2(monthAvail / Math.pow(1 + mcpi, mfN)),
+    monthlyAvailablePV60: round2(monthAvail / Math.pow(1 + mcpi, mfR))
+  };
+}
+
+function simFixedRate(total, rate, etf, retDate, years, mcpi, ip, labIns, natPen) {
+  var res = [], a = total, rm = retDate.getMonth() + 1;
+  for (var y = 1; y <= years; y++) {
+    var w = a * rate;
+    var nw = calculateSellProceeds(w);
+    a -= w;
+    var yr = simulateYear(a, etf, rm);
+    a = yr.assets;
+    res.push(buildRow(y, nw, a, yr.growth, mcpi, ip, labIns, natPen));
+  }
+  return res;
+}
+
+function simIncreasingRate(total, baseRate, etf, retDate, years, mcpi, ip, labIns, natPen) {
+  var res = [], a = total, rm = retDate.getMonth() + 1;
+  for (var y = 1; y <= years; y++) {
+    var di = Math.floor((y - 1) / 10);
+    var cr = baseRate + di * 0.01;
+    var w = a * cr;
+    var nw = calculateSellProceeds(w);
+    a -= w;
+    var yr = simulateYear(a, etf, rm);
+    a = yr.assets;
+    res.push(buildRow(y, nw, a, yr.growth, mcpi, ip, labIns, natPen));
+  }
+  return res;
+}
+
+function simConstantPV(total, etf, retDate, years, mcpi, annCPI, ip, labIns, natPen) {
+  var low = 0, high = total, tol = 1;
+
+  function simWithPV(pv60) {
+    var res = [], a = total, rm = retDate.getMonth() + 1, funded = true;
+    for (var y = 1; y <= years; y++) {
+      var nom = pv60 * Math.pow(1 + annCPI, y - 1);
+      var gross = nom / (1 - SELL_FEE_RATE);
+      var actual = Math.min(gross, a);
+      if (actual < gross - 0.01) funded = false;
+      var nw = calculateSellProceeds(actual);
+      a -= actual;
+      if (a < 0) a = 0;
+      var yr = simulateYear(a, etf, rm);
+      a = yr.assets;
+      res.push(buildRow(y, nw, a, yr.growth, mcpi, ip, labIns, natPen));
+    }
+    return { remaining: a, fullyFunded: funded, withdrawals: res };
+  }
+
+  for (var iter = 0; iter < 100; iter++) {
+    var mid = (low + high) / 2;
+    var r = simWithPV(mid);
+    if (r.fullyFunded && Math.abs(r.remaining) < tol) break;
+    if (!r.fullyFunded || r.remaining < 0) high = mid;
+    else low = mid;
+  }
+  return simWithPV((low + high) / 2).withdrawals;
+}
+
+function calculateDistribution(accR, distS, basicS, derived) {
+  var total = calculateTotalRetirementAssets(accR, distS);
+  var years = Math.ceil(derived.distributionPeriodMonths / 12);
+  var etf = distS.retirementETF;
+  var aw;
+
+  if (distS.strategy === 'fixed-rate') {
+    aw = simFixedRate(total, distS.withdrawalRate, etf, derived.retirementDate, years,
+      derived.monthlyCPI, derived.investmentPeriodMonths, distS.laborInsuranceMonthly, distS.nationalPensionMonthly);
+  } else if (distS.strategy === 'increasing-rate') {
+    aw = simIncreasingRate(total, distS.withdrawalRate, etf, derived.retirementDate, years,
+      derived.monthlyCPI, derived.investmentPeriodMonths, distS.laborInsuranceMonthly, distS.nationalPensionMonthly);
+  } else {
+    aw = simConstantPV(total, etf, derived.retirementDate, years,
+      derived.monthlyCPI, basicS.annualCPI, derived.investmentPeriodMonths, distS.laborInsuranceMonthly, distS.nationalPensionMonthly);
+  }
+
+  var last = aw[aw.length - 1];
+  return { totalRetirementAssets: round2(total), annualWithdrawals: aw, estate: last ? round2(last.remainingAssets) : 0 };
+}
+
+// ============================================================
+// UI Logic
+// ============================================================
+
+var lumpSumCount = 0, dcaCount = 0;
+
+function etfFieldsHTML(prefix, idx) {
+  return '<div class="form-group"><label>ETF 名稱</label><input type="text" id="' + prefix + 'Name' + idx + '" value="0050"></div>'
+    + '<div class="form-group"><label>年 CAGR (%)</label><input type="number" id="' + prefix + 'Cagr' + idx + '" value="8" step="0.1"></div>'
+    + '<div class="form-group"><label>年 LAIR (%)</label><input type="number" id="' + prefix + 'Lair' + idx + '" value="4" step="0.1"></div>'
+    + '<div class="form-group"><label>配息頻率</label><select id="' + prefix + 'Freq' + idx + '">'
+    + '<option value="semi-annual">半年配</option><option value="quarterly">季配</option></select></div>';
+}
+
+function addLumpSum() {
+  var i = lumpSumCount++;
+  var div = document.createElement('div');
+  div.className = 'investment-row';
+  div.id = 'ls' + i;
+  div.innerHTML = '<div class="form-group"><label>投入金額</label><input type="number" id="lsAmt' + i + '" value="1000000" min="0" step="10000"></div>'
+    + etfFieldsHTML('ls', i)
+    + '<button class="btn btn-sm btn-danger" onclick="removeLumpSum(' + i + ')">刪除</button>';
+  document.getElementById('lumpSumList').appendChild(div);
+}
+
+function removeLumpSum(i) { var el = document.getElementById('ls' + i); if (el) el.remove(); }
+
+function addDCA() {
+  var i = dcaCount++;
+  var div = document.createElement('div');
+  div.className = 'investment-row';
+  div.id = 'dca' + i;
+  div.innerHTML = '<div class="form-group"><label>每月金額</label><input type="number" id="dcaAmt' + i + '" value="10000" min="0" step="1000"></div>'
+    + etfFieldsHTML('dca', i)
+    + '<button class="btn btn-sm btn-danger" onclick="removeDCA(' + i + ')">刪除</button>';
+  document.getElementById('dcaList').appendChild(div);
+}
+
+function removeDCA(i) { var el = document.getElementById('dca' + i); if (el) el.remove(); }
+
+function readETF(prefix, idx) {
+  return {
+    name: document.getElementById(prefix + 'Name' + idx).value,
+    annualCAGR: parseFloat(document.getElementById(prefix + 'Cagr' + idx).value) / 100,
+    annualLAIR: parseFloat(document.getElementById(prefix + 'Lair' + idx).value) / 100,
+    dividendFrequency: document.getElementById(prefix + 'Freq' + idx).value
+  };
+}
+
+function onStrategyChange() {
+  var v = document.querySelector('input[name="strategy"]:checked').value;
+  var desc = document.getElementById('strategyDesc');
+  var rg = document.getElementById('withdrawalRateGroup');
+  if (v === 'fixed-rate') {
+    desc.textContent = '每年年初固定領出資產的 x%，壽命結束當下未領出的資產為遺產。';
+    rg.classList.remove('hidden');
+  } else if (v === 'increasing-rate') {
+    desc.textContent = '每年年初領出資產的 x%，x 每十年增加 1%（Year 1~10: x%, Year 11~20: x+1%, ...），壽命結束當下未領出的資產為遺產。';
+    rg.classList.remove('hidden');
+  } else {
+    desc.textContent = '每年年初領出一筆金額，使每年回算到退休日的現值 (PV@60) 儘量相等，壽命結束時遺產歸零。';
+    rg.classList.add('hidden');
+  }
+}
+
+function fmt(n) {
+  if (n === undefined || n === null) return '-';
+  return n.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+}
+
+function fmtD(n) {
+  return n.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtDate(d) {
+  return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+}
+
+function fmtPct(n) {
+  return (n * 100).toFixed(4) + '%';
+}
+
+function runCalculation() {
+  var errBox = document.getElementById('errorBox');
+  errBox.textContent = '';
+  document.getElementById('results').style.display = 'none';
+
+  try {
+    // Read basic settings
+    var bdVal = document.getElementById('birthDate').value;
+    var cdVal = document.getElementById('calcDate').value;
+    if (!bdVal || !cdVal) throw new Error('請填寫出生日期與計算日期');
+
+    var bdParts = bdVal.split('-');
+    var cdParts = cdVal.split('-');
+    var birthDate = new Date(parseInt(bdParts[0]), parseInt(bdParts[1]) - 1, parseInt(bdParts[2]));
+    var calcDate = new Date(parseInt(cdParts[0]), parseInt(cdParts[1]) - 1, parseInt(cdParts[2]));
+
+    var basicSettings = {
+      birthDate: birthDate,
+      calculationDate: calcDate,
+      retirementAge: parseInt(document.getElementById('retirementAge').value),
+      lifeExpectancy: parseInt(document.getElementById('lifeExpectancy').value),
+      annualCPI: parseFloat(document.getElementById('annualCPI').value) / 100
+    };
+
+    // Calculate derived
+    var derived = calculateDerived(basicSettings);
+
+    // Read Module A
+    var lsList = document.getElementById('lumpSumList').children;
+    var lumpSums = [];
+    for (var i = 0; i < lsList.length; i++) {
+      var el = lsList[i];
+      var idx = el.id.replace('ls', '');
+      var amtEl = document.getElementById('lsAmt' + idx);
+      if (!amtEl) continue;
+      lumpSums.push({ amount: parseFloat(amtEl.value), etf: readETF('ls', idx) });
+    }
+
+    var dcaListEl = document.getElementById('dcaList').children;
+    var dcas = [];
+    for (var i = 0; i < dcaListEl.length; i++) {
+      var el = dcaListEl[i];
+      var idx = el.id.replace('dca', '');
+      var amtEl = document.getElementById('dcaAmt' + idx);
+      if (!amtEl) continue;
+      dcas.push({ monthlyAmount: parseFloat(amtEl.value), etf: readETF('dca', idx) });
+    }
+
+    var accSettings = { lumpSumInvestments: lumpSums, dcaInvestments: dcas };
+    var accResult = calculateAccumulation(accSettings, basicSettings, derived);
+
+    // Read Module B
+    var strategy = document.querySelector('input[name="strategy"]:checked').value;
+    var wRate = parseFloat(document.getElementById('withdrawalRate').value) / 100;
+
+    var distSettings = {
+      strategy: strategy,
+      withdrawalRate: wRate,
+      retirementETF: {
+        name: document.getElementById('retETFName').value,
+        annualCAGR: parseFloat(document.getElementById('retETFCagr').value) / 100,
+        annualLAIR: parseFloat(document.getElementById('retETFLair').value) / 100,
+        dividendFrequency: document.getElementById('retETFFreq').value
+      },
+      laborPensionLumpSum: parseFloat(document.getElementById('laborPension').value) || 0,
+      otherAssets: parseFloat(document.getElementById('otherAssets').value) || 0,
+      laborInsuranceMonthly: parseFloat(document.getElementById('laborInsurance').value) || 0,
+      nationalPensionMonthly: parseFloat(document.getElementById('nationalPension').value) || 0
+    };
+
+    var distResult = calculateDistribution(accResult, distSettings, basicSettings, derived);
+
+    // --- Render results ---
+    document.getElementById('results').style.display = 'block';
+
+    // Derived
+    document.getElementById('derivedGrid').innerHTML =
+      '<div class="derived-item"><div class="label">現在年齡</div><div class="value">' + derived.ageDescription + '</div></div>'
+      + '<div class="derived-item"><div class="label">退休日期</div><div class="value">' + fmtDate(derived.retirementDate) + '</div></div>'
+      + '<div class="derived-item"><div class="label">預期壽命終點</div><div class="value">' + fmtDate(derived.lifeEndDate) + '</div></div>'
+      + '<div class="derived-item"><div class="label">積累期 IP</div><div class="value">' + fmtD(derived.investmentPeriodMonths) + ' 月</div></div>'
+      + '<div class="derived-item"><div class="label">分配期 DP</div><div class="value">' + fmtD(derived.distributionPeriodMonths) + ' 月</div></div>'
+      + '<div class="derived-item"><div class="label">月 CPI (MCPI)</div><div class="value">' + fmtPct(derived.monthlyCPI) + '</div></div>';
+
+    // Accumulation
+    document.getElementById('accSummary').innerHTML =
+      '<div class="summary-item"><div class="label">一次性投入累積</div><div class="value">$' + fmt(accResult.lumpSumTotal) + '</div></div>'
+      + '<div class="summary-item"><div class="label">定期定額累積</div><div class="value">$' + fmt(accResult.dcaTotal) + '</div></div>'
+      + '<div class="summary-item accent"><div class="label">退休當下可分配財產</div><div class="value">$' + fmt(accResult.totalAtRetirement) + '</div></div>';
+
+    // Distribution summary
+    document.getElementById('distSummary').innerHTML =
+      '<div class="summary-item accent"><div class="label">退休總資產（含勞退+其他，入ETF後）</div><div class="value">$' + fmt(distResult.totalRetirementAssets) + '</div></div>'
+      + '<div class="summary-item green"><div class="label">壽命結束時遺產</div><div class="value">$' + fmt(distResult.estate) + '</div></div>';
+
+    // Distribution table
+    var tbody = document.getElementById('distTableBody');
+    tbody.innerHTML = '';
+    for (var i = 0; i < distResult.annualWithdrawals.length; i++) {
+      var w = distResult.annualWithdrawals[i];
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + w.year + '</td>'
+        + '<td>$' + fmt(w.withdrawalAmount) + '</td>'
+        + '<td>$' + fmt(w.pvAtRetirement) + '</td>'
+        + '<td>$' + fmt(w.pvAtNow) + '</td>'
+        + '<td>$' + fmt(w.etfGrowth) + '</td>'
+        + '<td>$' + fmt(w.remainingAssets) + '</td>'
+        + '<td>$' + fmt(w.monthlyAvailable) + '</td>'
+        + '<td>$' + fmt(w.monthlyAvailablePVNow) + '</td>'
+        + '<td>$' + fmt(w.monthlyAvailablePV60) + '</td>';
+      tbody.appendChild(tr);
+    }
+
+    // Scroll to results
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+
+  } catch (e) {
+    errBox.textContent = e.message;
+  }
+}
+
+// --- Initialize ---
+(function init() {
+  // Set today's date
+  var today = new Date();
+  var y = today.getFullYear();
+  var m = String(today.getMonth() + 1).padStart(2, '0');
+  var d = String(today.getDate()).padStart(2, '0');
+  document.getElementById('calcDate').value = y + '-' + m + '-' + d;
+
+  // Add one default lump sum and one default DCA
+  addLumpSum();
+  addDCA();
+})();
+</script>
+</body>
+</html>
