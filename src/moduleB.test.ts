@@ -8,10 +8,12 @@ import {
 } from './types';
 
 const sampleETF: ETFProduct = {
-  name: '0050',
+  id: '0050',
+  name: '元大台灣 50',
+  yearsEstablished: 22,
   annualCAGR: 0.08,
   annualLAIR: 0.04,
-  dividendFrequency: 'semi-annual',
+  dividendMonths: [1, 7],
 };
 
 const basicSettings: BasicSettings = {
@@ -62,8 +64,6 @@ describe('calculateDistribution - fixed-rate', () => {
 
   it('generates annual withdrawals for each year of retirement', () => {
     const result = calculateDistribution(accResult, distSettings, basicSettings, derived);
-
-    // Distribution period: 25 years
     expect(result.annualWithdrawals.length).toBe(25);
   });
 
@@ -71,7 +71,6 @@ describe('calculateDistribution - fixed-rate', () => {
     const result = calculateDistribution(accResult, distSettings, basicSettings, derived);
     const firstYear = result.annualWithdrawals[0];
 
-    // Total assets after buy fee, then 4% withdrawal with sell fee
     const totalAfterBuyFee = accResult.totalAtRetirement * (1 - 0.001425);
     const grossWithdrawal = totalAfterBuyFee * 0.04;
     const netWithdrawal = grossWithdrawal * (1 - 0.002425);
@@ -82,14 +81,11 @@ describe('calculateDistribution - fixed-rate', () => {
   it('includes pension amounts in monthly available', () => {
     const result = calculateDistribution(accResult, distSettings, basicSettings, derived);
     const firstYear = result.annualWithdrawals[0];
-
-    // monthlyAvailable = withdrawal/12 + laborInsurance + nationalPension
-    expect(firstYear.monthlyAvailable).toBeGreaterThan(25000); // At least pensions
+    expect(firstYear.monthlyAvailable).toBeGreaterThan(25000);
   });
 
   it('has positive remaining assets at end (estate)', () => {
     const result = calculateDistribution(accResult, distSettings, basicSettings, derived);
-    // With 4% withdrawal and ~12% growth, assets should grow over time
     expect(result.estate).toBeGreaterThan(0);
   });
 
@@ -97,10 +93,7 @@ describe('calculateDistribution - fixed-rate', () => {
     const result = calculateDistribution(accResult, distSettings, basicSettings, derived);
     const firstYear = result.annualWithdrawals[0];
 
-    // PV@retirement for first year should equal nominal (no discounting needed for year 1)
     expect(firstYear.pvAtRetirement).toBeCloseTo(firstYear.withdrawalAmount, 0);
-
-    // PV@now should be less than PV@retirement (discounted back further)
     expect(firstYear.pvAtNow).toBeLessThan(firstYear.pvAtRetirement);
   });
 });
@@ -123,13 +116,7 @@ describe('calculateDistribution - increasing-rate', () => {
 
   it('year 11 uses higher withdrawal rate than year 1', () => {
     const result = calculateDistribution(accResult, distSettings, basicSettings, derived);
-    // Year 1: 4%, Year 11: 5%
-    // Year 11 has a higher rate applied to (likely larger) assets
-    const year1 = result.annualWithdrawals[0];
     const year11 = result.annualWithdrawals[10];
-
-    // The withdrawal as percentage of remaining assets should be higher for year 11
-    // We can check indirectly that withdrawal amounts reflect the rate increase
     expect(year11).toBeDefined();
     expect(year11.year).toBe(11);
   });
@@ -152,15 +139,13 @@ describe('calculateDistribution - constant-pv', () => {
 
   it('estate should be approximately zero', () => {
     const result = calculateDistribution(accResult, distSettings, basicSettings, derived);
-    // The constant-PV strategy targets zero estate
-    expect(Math.abs(result.estate)).toBeLessThan(100); // Within 100 tolerance
+    expect(Math.abs(result.estate)).toBeLessThan(100);
   });
 
   it('PV@retirement values should be roughly equal across years', () => {
     const result = calculateDistribution(accResult, distSettings, basicSettings, derived);
     const pvValues = result.annualWithdrawals.map(w => w.pvAtRetirement);
 
-    // Check that PVs are within 5% of each other
     const avgPV = pvValues.reduce((a, b) => a + b, 0) / pvValues.length;
     for (const pv of pvValues) {
       const deviation = Math.abs(pv - avgPV) / avgPV;
@@ -172,8 +157,6 @@ describe('calculateDistribution - constant-pv', () => {
     const result = calculateDistribution(accResult, distSettings, basicSettings, derived);
     const firstYear = result.annualWithdrawals[0];
     const lastYear = result.annualWithdrawals[result.annualWithdrawals.length - 1];
-
-    // With 2% CPI, last year nominal should be higher than first year
     expect(lastYear.withdrawalAmount).toBeGreaterThan(firstYear.withdrawalAmount);
   });
 });
@@ -195,7 +178,6 @@ describe('integration: full calculation with pensions', () => {
     expect(result.totalRetirementAssets).toBeGreaterThan(0);
     expect(result.annualWithdrawals.length).toBe(25);
 
-    // Every year should have positive monthly available
     for (const year of result.annualWithdrawals) {
       expect(year.monthlyAvailable).toBeGreaterThan(0);
       expect(year.monthlyAvailablePVNow).toBeGreaterThan(0);

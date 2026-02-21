@@ -12,7 +12,7 @@ export {
   BasicSettings,
   DerivedCalculations,
   ETFProduct,
-  DividendFrequency,
+  ConfidenceLevel,
   LumpSumInvestment,
   DCAInvestment,
   AccumulationSettings,
@@ -22,6 +22,8 @@ export {
   AnnualWithdrawal,
   WithdrawalStrategy,
   RetirementCalculationResult,
+  MonthlyDetail,
+  InvestmentSimResult,
 } from './types';
 
 export {
@@ -41,11 +43,15 @@ export {
   getSingleDividendRate,
   simulateMonthGrowth,
   simulateGrowth,
+  applyConfidence,
+  CONFIDENCE_MULTIPLIERS,
 } from './etfModel';
 
 export {
   simulateLumpSum,
+  simulateLumpSumDetailed,
   simulateDCA,
+  simulateDCADetailed,
   calculateAccumulation,
 } from './moduleA';
 
@@ -61,24 +67,14 @@ import { calculateDistribution } from './moduleB';
 
 /**
  * 執行完整的退休計算
- *
- * @param basicSettings 基本設定
- * @param accSettings Module A 積累設定
- * @param distSettings Module B 分配設定
- * @returns 完整計算結果
  */
 export function calculateRetirement(
   basicSettings: BasicSettings,
   accSettings: AccumulationSettings,
   distSettings: DistributionSettings,
 ): RetirementCalculationResult {
-  // 1. 計算衍生值
   const derived = calculateDerived(basicSettings);
-
-  // 2. Module A: 積累
   const accumulation = calculateAccumulation(accSettings, basicSettings, derived);
-
-  // 3. Module B: 分配
   const distribution = calculateDistribution(accumulation, distSettings, basicSettings, derived);
 
   return {

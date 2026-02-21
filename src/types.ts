@@ -36,19 +36,23 @@ export interface DerivedCalculations {
   lifeEndDate: Date;
 }
 
-/** ETF 配息頻率 */
-export type DividendFrequency = 'semi-annual' | 'quarterly';
+/** 信心度 */
+export type ConfidenceLevel = 'high' | 'mid' | 'low';
 
 /** ETF 商品定義 */
 export interface ETFProduct {
+  /** ETF 代號 */
+  id: string;
   /** ETF 名稱 */
   name: string;
-  /** 年 CAGR (本金成長率) */
+  /** 成立年期 */
+  yearsEstablished: number;
+  /** 年 CAGR (不含息資本利得) */
   annualCAGR: number;
   /** 年配息率均值 LAIR */
   annualLAIR: number;
-  /** 配息頻率 */
-  dividendFrequency: DividendFrequency;
+  /** 配息月份 (1-12)，例如 [1,7] 表示 1 月和 7 月配息 */
+  dividendMonths: number[];
 }
 
 /** ETF 衍生計算值 */
@@ -67,6 +71,8 @@ export interface LumpSumInvestment {
   amount: number;
   /** 選擇的 ETF 商品 */
   etf: ETFProduct;
+  /** 信心度：高=100%, 中=80%, 低=60% */
+  confidence: ConfidenceLevel;
 }
 
 /** Module A: 定期定額投入 */
@@ -75,6 +81,8 @@ export interface DCAInvestment {
   monthlyAmount: number;
   /** 選擇的 ETF 商品 */
   etf: ETFProduct;
+  /** 信心度：高=100%, 中=80%, 低=60% */
+  confidence: ConfidenceLevel;
 }
 
 /** Module A 設定 */
@@ -106,18 +114,38 @@ export interface DistributionSettings {
   nationalPensionMonthly: number;
 }
 
-/** 單月結果快照 */
-export interface MonthlySnapshot {
+/** 每月明細 (用於前端展開檢視) */
+export interface MonthlyDetail {
   /** 第幾個月 (1-based) */
   month: number;
-  /** 月初本金 */
-  principalStart: number;
-  /** 月底本金 (含 CAGR 增長) */
-  principalEnd: number;
-  /** 當月配息金額 (若有) */
+  /** 日曆年 */
+  calendarYear: number;
+  /** 日曆月 (1-12) */
+  calendarMonth: number;
+  /** 期初餘額 (本月月初) */
+  beginBalance: number;
+  /** 本月購買金額 (扣除手續費後，DCA 才有；一次性為 0) */
+  purchase: number;
+  /** CAGR 增值金額 */
+  cagrGrowth: number;
+  /** 配息金額 */
   dividend: number;
-  /** 當月新投入金額 (若有) */
-  contribution: number;
+  /** 期末餘額 (本月月底) */
+  endBalance: number;
+  /** 期末名目價值 */
+  nominal: number;
+  /** 期末 PV@NOW (折算至今日現值) */
+  pvNow: number;
+  /** 期末 PV@60 (折算至退休日現值) */
+  pv60: number;
+}
+
+/** 單筆投資模擬結果 */
+export interface InvestmentSimResult {
+  /** 退休當下的最終價值 */
+  finalValue: number;
+  /** 每月明細 */
+  monthlyDetails: MonthlyDetail[];
 }
 
 /** Module A 計算結果 */

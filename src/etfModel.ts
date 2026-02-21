@@ -1,5 +1,25 @@
-import { ETFProduct, ETFDerived, DividendFrequency } from './types';
+import { ETFProduct, ETFDerived, ConfidenceLevel } from './types';
 import { annualToMonthlyRate } from './basicSettings';
+
+/** 信心度乘數對照 */
+export const CONFIDENCE_MULTIPLIERS: Record<ConfidenceLevel, number> = {
+  high: 1.0,
+  mid: 0.8,
+  low: 0.6,
+};
+
+/**
+ * 根據信心度調整 ETF 參數
+ * 回傳一個調整後的 ETF（CAGR 和 LAIR 乘以信心度倍率）
+ */
+export function applyConfidence(etf: ETFProduct, confidence: ConfidenceLevel): ETFProduct {
+  const mult = CONFIDENCE_MULTIPLIERS[confidence];
+  return {
+    ...etf,
+    annualCAGR: etf.annualCAGR * mult,
+    annualLAIR: etf.annualLAIR * mult,
+  };
+}
 
 /** 買入手續費率 0.1425% */
 const BUY_FEE_RATE = 0.001425;
@@ -35,28 +55,20 @@ export function calculateSellProceeds(sellAmount: number): number {
 /**
  * 判斷某月是否為配息月
  * @param month 月份 (1-12)
- * @param frequency 配息頻率
+ * @param dividendMonths 配息月份陣列，例如 [1,7]
  * @returns 是否為配息月
  */
-export function isDividendMonth(month: number, frequency: DividendFrequency): boolean {
-  if (frequency === 'semi-annual') {
-    // 半年配：2月和8月
-    return month === 2 || month === 8;
-  } else {
-    // 季配：3月、6月、9月、12月
-    return month === 3 || month === 6 || month === 9 || month === 12;
-  }
+export function isDividendMonth(month: number, dividendMonths: number[]): boolean {
+  return dividendMonths.includes(month);
 }
 
 /**
  * 計算單次配息率
+ * 年配息率除以每年配息次數
  */
 export function getSingleDividendRate(etf: ETFProduct): number {
-  if (etf.dividendFrequency === 'semi-annual') {
-    return etf.annualLAIR / 2;
-  } else {
-    return etf.annualLAIR / 4;
-  }
+  if (etf.dividendMonths.length === 0) return 0;
+  return etf.annualLAIR / etf.dividendMonths.length;
 }
 
 /**
@@ -87,7 +99,7 @@ export function simulateMonthGrowth(
   let dividend = 0;
 
   // 配息：在配息月，以月初本金（即上月月底本金）計算配息
-  if (isDividendMonth(calendarMonth, etf.dividendFrequency)) {
+  if (isDividendMonth(calendarMonth, etf.dividendMonths)) {
     const singleRate = getSingleDividendRate(etf);
     dividend = principal * singleRate;
   }

@@ -5,9 +5,11 @@ import {
   AccumulationResult,
   LumpSumInvestment,
   DCAInvestment,
-  ETFProduct,
+  MonthlyDetail,
+  InvestmentSimResult,
 } from './types';
-import { calculateBuyAmount, simulateMonthGrowth } from './etfModel';
+import { calculateBuyAmount, simulateMonthGrowth, applyConfidence } from './etfModel';
+import { annualToMonthlyRate, round2 } from './basicSettings';
 
 /**
  * Module A: 積累模組
@@ -18,101 +20,164 @@ import { calculateBuyAmount, simulateMonthGrowth } from './etfModel';
  */
 
 /**
- * 計算單筆一次性投入在退休當下的總值
- *
- * 投入時間：計算當日
- * 成長期間：從計算日到退休日（IP 月）
- *
- * @param investment 一次性投入設定
- * @param settings 基本設定
- * @param derived 衍生計算值
- * @returns 退休當下的資產總值
+ * 計算單筆一次性投入，回傳最終值與每月明細
  */
 export function simulateLumpSum(
   investment: LumpSumInvestment,
   settings: BasicSettings,
   derived: DerivedCalculations,
 ): number {
+  const result = simulateLumpSumDetailed(investment, settings, derived);
+  return result.finalValue;
+}
+
+/**
+ * 計算單筆一次性投入（含每月明細）
+ */
+export function simulateLumpSumDetailed(
+  investment: LumpSumInvestment,
+  settings: BasicSettings,
+  derived: DerivedCalculations,
+): InvestmentSimResult {
+  // 套用信心度
+  const etf = applyConfidence(investment.etf, investment.confidence);
+  const mcagr = annualToMonthlyRate(etf.annualCAGR);
+  const mcpi = derived.monthlyCPI;
+  const ip = derived.investmentPeriodMonths;
+
   // 扣除買入手續費
   let principal = calculateBuyAmount(investment.amount);
 
   const startDate = settings.calculationDate;
-  const totalMonths = Math.floor(derived.investmentPeriodMonths);
+  const totalMonths = Math.floor(ip);
 
   let currentMonth = startDate.getMonth() + 1; // 1-12
+  let currentYear = startDate.getFullYear();
+  const monthlyDetails: MonthlyDetail[] = [];
 
   for (let i = 0; i < totalMonths; i++) {
-    const result = simulateMonthGrowth(principal, investment.etf, currentMonth);
+    const beginBalance = principal;
+
+    const result = simulateMonthGrowth(principal, etf, currentMonth);
+    const cagrGrowth = principal * mcagr;
     principal = result.newPrincipal;
+
+    // PV 計算：月份 i+1（從現在算起）
+    const m = i + 1;
+    const pvNow = principal / Math.pow(1 + mcpi, m);
+    const pv60 = principal / Math.pow(1 + mcpi, ip);
+
+    monthlyDetails.push({
+      month: m,
+      calendarYear: currentYear,
+      calendarMonth: currentMonth,
+      beginBalance: round2(beginBalance),
+      purchase: 0,
+      cagrGrowth: round2(cagrGrowth),
+      dividend: round2(result.dividend),
+      endBalance: round2(principal),
+      nominal: round2(principal),
+      pvNow: round2(pvNow),
+      pv60: round2(pv60),
+    });
 
     currentMonth++;
     if (currentMonth > 12) {
       currentMonth = 1;
+      currentYear++;
     }
   }
 
-  return principal;
+  return { finalValue: principal, monthlyDetails };
 }
 
 /**
- * 計算單筆定期定額投入在退休當下的總值
- *
- * 投入方式：每月月初投入固定金額（扣除買入手續費後購買 ETF）
- * 投入期間：從計算當日起至退休日止（IP 月）
- * 每月增長：本金 × (1+MCAGR)，配息月份配息全數滾入
- *
- * @param investment 定期定額投入設定
- * @param settings 基本設定
- * @param derived 衍生計算值
- * @returns 退休當下的資產總值
+ * 計算單筆定期定額投入，回傳最終值
  */
 export function simulateDCA(
   investment: DCAInvestment,
   settings: BasicSettings,
   derived: DerivedCalculations,
 ): number {
-  const totalMonths = Math.floor(derived.investmentPeriodMonths);
+  const result = simulateDCADetailed(investment, settings, derived);
+  return result.finalValue;
+}
+
+/**
+ * 計算單筆定期定額投入（含每月明細）
+ */
+export function simulateDCADetailed(
+  investment: DCAInvestment,
+  settings: BasicSettings,
+  derived: DerivedCalculations,
+): InvestmentSimResult {
+  // 套用信心度
+  const etf = applyConfidence(investment.etf, investment.confidence);
+  const mcagr = annualToMonthlyRate(etf.annualCAGR);
+  const mcpi = derived.monthlyCPI;
+  const ip = derived.investmentPeriodMonths;
+
+  const totalMonths = Math.floor(ip);
   let principal = 0;
-  let currentMonth = settings.calculationDate.getMonth() + 1; // 1-12
+  let currentMonth = settings.calculationDate.getMonth() + 1;
+  let currentYear = settings.calculationDate.getFullYear();
+  const monthlyDetails: MonthlyDetail[] = [];
 
   for (let i = 0; i < totalMonths; i++) {
+    const beginBalance = principal;
+
     // 月初投入：扣除手續費後加入本金
     const contribution = calculateBuyAmount(investment.monthlyAmount);
     principal += contribution;
 
     // 月底增長與配息
-    const result = simulateMonthGrowth(principal, investment.etf, currentMonth);
+    const principalBeforeGrowth = principal;
+    const result = simulateMonthGrowth(principal, etf, currentMonth);
+    const cagrGrowth = principalBeforeGrowth * mcagr;
     principal = result.newPrincipal;
+
+    // PV 計算
+    const m = i + 1;
+    const pvNow = principal / Math.pow(1 + mcpi, m);
+    const pv60 = principal / Math.pow(1 + mcpi, ip);
+
+    monthlyDetails.push({
+      month: m,
+      calendarYear: currentYear,
+      calendarMonth: currentMonth,
+      beginBalance: round2(beginBalance),
+      purchase: round2(contribution),
+      cagrGrowth: round2(cagrGrowth),
+      dividend: round2(result.dividend),
+      endBalance: round2(principal),
+      nominal: round2(principal),
+      pvNow: round2(pvNow),
+      pv60: round2(pv60),
+    });
 
     currentMonth++;
     if (currentMonth > 12) {
       currentMonth = 1;
+      currentYear++;
     }
   }
 
-  return principal;
+  return { finalValue: principal, monthlyDetails };
 }
 
 /**
  * 計算 Module A 的完整結果
- *
- * @param accSettings 積累設定
- * @param basicSettings 基本設定
- * @param derived 衍生計算值
- * @returns 積累結果
  */
 export function calculateAccumulation(
   accSettings: AccumulationSettings,
   basicSettings: BasicSettings,
   derived: DerivedCalculations,
 ): AccumulationResult {
-  // 所有一次性投入的加總
   let lumpSumTotal = 0;
   for (const inv of accSettings.lumpSumInvestments) {
     lumpSumTotal += simulateLumpSum(inv, basicSettings, derived);
   }
 
-  // 所有定期定額投入的加總
   let dcaTotal = 0;
   for (const inv of accSettings.dcaInvestments) {
     dcaTotal += simulateDCA(inv, basicSettings, derived);

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>退休計算機</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --primary: #2563eb;
@@ -107,25 +108,81 @@
   }
   .derived-item .label { font-size: 0.8rem; color: var(--text-light); }
   .derived-item .value { font-size: 1.1rem; font-weight: 700; color: var(--primary-dark); }
-  .investment-row {
+
+  /* Investment row */
+  .investment-block {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    background: #fafbfc;
+  }
+  .investment-header {
     display: flex;
     gap: 12px;
     align-items: end;
-    margin-bottom: 10px;
     flex-wrap: wrap;
   }
-  .investment-row .form-group { flex: 1; min-width: 140px; }
-  .investment-row .btn { flex-shrink: 0; align-self: flex-end; margin-bottom: 2px; }
+  .investment-header .form-group { flex: 1; min-width: 140px; }
+  .investment-header .btn { flex-shrink: 0; align-self: flex-end; margin-bottom: 2px; }
+  .etf-info {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #eff6ff;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--primary-dark);
+    display: none;
+  }
+  .etf-info.show { display: block; }
+
+  /* Confidence radio inline */
+  .confidence-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 4px;
+  }
+  .confidence-group label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.85rem;
+    font-weight: normal;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .confidence-group input[type="radio"] { accent-color: var(--primary); }
+
+  /* Expandable detail section */
+  .detail-toggle {
+    margin-top: 10px;
+    cursor: pointer;
+    color: var(--primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    user-select: none;
+    display: none;
+  }
+  .detail-toggle:hover { text-decoration: underline; }
+  .detail-content {
+    display: none;
+    margin-top: 12px;
+  }
+  .detail-content.open { display: block; }
+
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85rem;
-    margin-top: 12px;
+    font-size: 0.8rem;
+    margin-top: 8px;
   }
-  th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border); }
-  th { background: #f1f5f9; font-weight: 600; color: var(--text-light); position: sticky; top: 0; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); }
+  th { background: #f1f5f9; font-weight: 600; color: var(--text-light); position: sticky; top: 0; z-index: 1; }
   td:first-child, th:first-child { text-align: center; }
-  .table-wrap { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .table-wrap { max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .chart-container { margin-top: 12px; max-height: 300px; }
+
   .summary-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -151,11 +208,23 @@
   .radio-group label { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; font-weight: normal; color: var(--text); }
   .radio-group input[type="radio"] { accent-color: var(--primary); }
   .strategy-desc { font-size: 0.8rem; color: var(--text-light); margin: 4px 0 12px 0; }
+
+  /* ETF catalog table */
+  .etf-catalog {
+    overflow-x: auto;
+    margin-bottom: 16px;
+  }
+  .etf-catalog table {
+    font-size: 0.82rem;
+  }
+  .etf-catalog th { background: #ede9fe; color: var(--accent); }
+  .etf-catalog td { text-align: center; }
+
   @media (max-width: 600px) {
     .form-grid { grid-template-columns: 1fr; }
-    .investment-row { flex-direction: column; }
-    table { font-size: 0.75rem; }
-    th, td { padding: 6px 4px; }
+    .investment-header { flex-direction: column; }
+    table { font-size: 0.7rem; }
+    th, td { padding: 4px 3px; }
   }
 </style>
 </head>
@@ -163,6 +232,26 @@
 <div class="container">
   <h1>退休計算機</h1>
   <p class="subtitle">模擬被動式 ETF 指數基金的退休金積累與分配計畫</p>
+
+  <!-- ETF 商品總覽 -->
+  <div class="card">
+    <h2>ETF 商品總覽</h2>
+    <div class="etf-catalog">
+      <table>
+        <thead>
+          <tr>
+            <th>代號</th>
+            <th>名稱</th>
+            <th>成立年期</th>
+            <th>股價 CAGR</th>
+            <th>年配息率</th>
+            <th>配息月份</th>
+          </tr>
+        </thead>
+        <tbody id="etfCatalogBody"></tbody>
+      </table>
+    </div>
+  </div>
 
   <!-- 基本設定 -->
   <div class="card">
@@ -215,24 +304,10 @@
     <h3>退休當下歸戶之 ETF 商品</h3>
     <div class="form-grid">
       <div class="form-group">
-        <label>ETF 名稱</label>
-        <input type="text" id="retETFName" value="0050" placeholder="例: 0050">
+        <label>選擇 ETF</label>
+        <select id="retETFSelect" onchange="onRetETFChange()"></select>
       </div>
-      <div class="form-group">
-        <label>年 CAGR (%)</label>
-        <input type="number" id="retETFCagr" value="8" step="0.1">
-      </div>
-      <div class="form-group">
-        <label>年配息率 LAIR (%)</label>
-        <input type="number" id="retETFLair" value="4" step="0.1">
-      </div>
-      <div class="form-group">
-        <label>配息頻率</label>
-        <select id="retETFFreq">
-          <option value="semi-annual">半年配 (2月/8月)</option>
-          <option value="quarterly">季配 (3/6/9/12月)</option>
-        </select>
-      </div>
+      <div id="retETFInfo" class="etf-info show" style="grid-column: 1/-1;"></div>
     </div>
 
     <h3>其他退休資產</h3>
@@ -324,7 +399,42 @@
 
 <script>
 // ============================================================
-// Calculation Engine (ported from TypeScript)
+// ETF 商品型錄
+// ============================================================
+var ETF_CATALOG = [
+  { id: '0050', name: '元大台灣 50', yearsEstablished: 22, annualCAGR: 0.0785, annualLAIR: 0.031, dividendMonths: [1, 7] },
+  { id: '006208', name: '富邦台 50', yearsEstablished: 13, annualCAGR: 0.1052, annualLAIR: 0.032, dividendMonths: [1, 7] },
+  { id: '0051', name: '元大中型 100', yearsEstablished: 19, annualCAGR: 0.0715, annualLAIR: 0.0305, dividendMonths: [11] },
+  { id: '006204', name: '永豐臺灣加權', yearsEstablished: 14, annualCAGR: 0.092, annualLAIR: 0.034, dividendMonths: [10] },
+  { id: '0056', name: '元大高股息', yearsEstablished: 18, annualCAGR: 0.021, annualLAIR: 0.069, dividendMonths: [1, 4, 7, 10] },
+  { id: '00878', name: '國泰永續高股息', yearsEstablished: 5.5, annualCAGR: 0.07, annualLAIR: 0.055, dividendMonths: [2, 5, 8, 11] },
+  { id: '00713', name: '元大高息低波', yearsEstablished: 8.2, annualCAGR: 0.066, annualLAIR: 0.062, dividendMonths: [3, 6, 9, 12] }
+];
+
+var CONFIDENCE_MULT = { high: 1.0, mid: 0.8, low: 0.6 };
+var MONTH_NAMES = ['','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function getETFById(id) {
+  for (var i = 0; i < ETF_CATALOG.length; i++) {
+    if (ETF_CATALOG[i].id === id) return ETF_CATALOG[i];
+  }
+  return ETF_CATALOG[0];
+}
+
+function etfMonthsStr(months) {
+  return months.map(function(m) { return MONTH_NAMES[m]; }).join('、');
+}
+
+function etfInfoHTML(etf) {
+  return etf.id + ' ' + etf.name +
+    ' | CAGR: ' + (etf.annualCAGR * 100).toFixed(2) + '%' +
+    ' | 配息率: ' + (etf.annualLAIR * 100).toFixed(2) + '%' +
+    ' | 配息: ' + etfMonthsStr(etf.dividendMonths) +
+    ' | 成立: ' + etf.yearsEstablished + '年';
+}
+
+// ============================================================
+// Calculation Engine (ported from TypeScript, updated)
 // ============================================================
 
 // --- basicSettings ---
@@ -383,56 +493,94 @@ var SELL_FEE_RATE = 0.001425 + 0.001;
 function calculateBuyAmount(amt) { return amt * (1 - BUY_FEE_RATE); }
 function calculateSellProceeds(amt) { return amt * (1 - SELL_FEE_RATE); }
 
-function isDividendMonth(m, freq) {
-  if (freq === 'semi-annual') return m === 2 || m === 8;
-  return m === 3 || m === 6 || m === 9 || m === 12;
+function applyConfidence(etf, confidence) {
+  var mult = CONFIDENCE_MULT[confidence] || 1.0;
+  var copy = {};
+  for (var k in etf) copy[k] = etf[k];
+  copy.annualCAGR = etf.annualCAGR * mult;
+  copy.annualLAIR = etf.annualLAIR * mult;
+  return copy;
+}
+
+function isDividendMonth(m, dividendMonths) {
+  return dividendMonths.indexOf(m) !== -1;
 }
 
 function getSingleDividendRate(etf) {
-  return etf.dividendFrequency === 'semi-annual' ? etf.annualLAIR / 2 : etf.annualLAIR / 4;
+  if (!etf.dividendMonths || etf.dividendMonths.length === 0) return 0;
+  return etf.annualLAIR / etf.dividendMonths.length;
 }
 
 function simulateMonthGrowth(principal, etf, calMonth) {
   var mcagr = annualToMonthlyRate(etf.annualCAGR);
   var div = 0;
-  if (isDividendMonth(calMonth, etf.dividendFrequency)) {
+  if (isDividendMonth(calMonth, etf.dividendMonths)) {
     div = principal * getSingleDividendRate(etf);
   }
   var grown = principal * (1 + mcagr);
   return { newPrincipal: grown + div, dividend: div };
 }
 
-// --- moduleA ---
-function simulateLumpSum(inv, settings, derived) {
+// --- moduleA: with monthly detail ---
+function simulateLumpSumDetailed(inv, settings, derived) {
+  var etf = applyConfidence(inv.etf, inv.confidence);
+  var mcagr = annualToMonthlyRate(etf.annualCAGR);
+  var mcpi = derived.monthlyCPI;
+  var ip = derived.investmentPeriodMonths;
   var p = calculateBuyAmount(inv.amount);
-  var total = Math.floor(derived.investmentPeriodMonths);
+  var total = Math.floor(ip);
   var cm = settings.calculationDate.getMonth() + 1;
+  var cy = settings.calculationDate.getFullYear();
+  var details = [];
   for (var i = 0; i < total; i++) {
-    var r = simulateMonthGrowth(p, inv.etf, cm);
+    var begin = p;
+    var r = simulateMonthGrowth(p, etf, cm);
+    var cg = begin * mcagr;
     p = r.newPrincipal;
-    cm++; if (cm > 12) cm = 1;
+    var m = i + 1;
+    details.push({
+      month: m, calendarYear: cy, calendarMonth: cm,
+      beginBalance: round2(begin), purchase: 0,
+      cagrGrowth: round2(cg), dividend: round2(r.dividend),
+      endBalance: round2(p), nominal: round2(p),
+      pvNow: round2(p / Math.pow(1 + mcpi, m)),
+      pv60: round2(p / Math.pow(1 + mcpi, ip))
+    });
+    cm++; if (cm > 12) { cm = 1; cy++; }
   }
-  return p;
+  return { finalValue: p, monthlyDetails: details };
 }
 
-function simulateDCA(inv, settings, derived) {
-  var total = Math.floor(derived.investmentPeriodMonths);
+function simulateDCADetailed(inv, settings, derived) {
+  var etf = applyConfidence(inv.etf, inv.confidence);
+  var mcagr = annualToMonthlyRate(etf.annualCAGR);
+  var mcpi = derived.monthlyCPI;
+  var ip = derived.investmentPeriodMonths;
+  var total = Math.floor(ip);
   var p = 0;
   var cm = settings.calculationDate.getMonth() + 1;
+  var cy = settings.calculationDate.getFullYear();
+  var details = [];
   for (var i = 0; i < total; i++) {
-    p += calculateBuyAmount(inv.monthlyAmount);
-    var r = simulateMonthGrowth(p, inv.etf, cm);
+    var begin = p;
+    var contrib = calculateBuyAmount(inv.monthlyAmount);
+    p += contrib;
+    var beforeGrowth = p;
+    var r = simulateMonthGrowth(p, etf, cm);
+    var cg = beforeGrowth * mcagr;
     p = r.newPrincipal;
-    cm++; if (cm > 12) cm = 1;
+    var m = i + 1;
+    details.push({
+      month: m, calendarYear: cy, calendarMonth: cm,
+      beginBalance: round2(begin), purchase: round2(contrib),
+      cagrGrowth: round2(cg), dividend: round2(r.dividend),
+      endBalance: round2(p), nominal: round2(p),
+      pvNow: round2(p / Math.pow(1 + mcpi, m)),
+      pv60: round2(p / Math.pow(1 + mcpi, ip))
+    });
+    cm++; if (cm > 12) { cm = 1; cy++; }
   }
-  return p;
-}
-
-function calculateAccumulation(accS, basicS, derived) {
-  var ls = 0, dc = 0;
-  for (var i = 0; i < accS.lumpSumInvestments.length; i++) ls += simulateLumpSum(accS.lumpSumInvestments[i], basicS, derived);
-  for (var i = 0; i < accS.dcaInvestments.length; i++) dc += simulateDCA(accS.dcaInvestments[i], basicS, derived);
-  return { lumpSumTotal: ls, dcaTotal: dc, totalAtRetirement: ls + dc };
+  return { finalValue: p, monthlyDetails: details };
 }
 
 // --- moduleB ---
@@ -499,7 +647,6 @@ function simIncreasingRate(total, baseRate, etf, retDate, years, mcpi, ip, labIn
 
 function simConstantPV(total, etf, retDate, years, mcpi, annCPI, ip, labIns, natPen) {
   var low = 0, high = total, tol = 1;
-
   function simWithPV(pv60) {
     var res = [], a = total, rm = retDate.getMonth() + 1, funded = true;
     for (var y = 1; y <= years; y++) {
@@ -516,7 +663,6 @@ function simConstantPV(total, etf, retDate, years, mcpi, annCPI, ip, labIns, nat
     }
     return { remaining: a, fullyFunded: funded, withdrawals: res };
   }
-
   for (var iter = 0; iter < 100; iter++) {
     var mid = (low + high) / 2;
     var r = simWithPV(mid);
@@ -532,7 +678,6 @@ function calculateDistribution(accR, distS, basicS, derived) {
   var years = Math.ceil(derived.distributionPeriodMonths / 12);
   var etf = distS.retirementETF;
   var aw;
-
   if (distS.strategy === 'fixed-rate') {
     aw = simFixedRate(total, distS.withdrawalRate, etf, derived.retirementDate, years,
       derived.monthlyCPI, derived.investmentPeriodMonths, distS.laborInsuranceMonthly, distS.nationalPensionMonthly);
@@ -543,7 +688,6 @@ function calculateDistribution(accR, distS, basicS, derived) {
     aw = simConstantPV(total, etf, derived.retirementDate, years,
       derived.monthlyCPI, basicS.annualCPI, derived.investmentPeriodMonths, distS.laborInsuranceMonthly, distS.nationalPensionMonthly);
   }
-
   var last = aw[aw.length - 1];
   return { totalRetirementAssets: round2(total), annualWithdrawals: aw, estate: last ? round2(last.remainingAssets) : 0 };
 }
@@ -553,48 +697,99 @@ function calculateDistribution(accR, distS, basicS, derived) {
 // ============================================================
 
 var lumpSumCount = 0, dcaCount = 0;
+// Store simulation results for detail expansion
+var lsSimResults = {};
+var dcaSimResults = {};
+// Store Chart.js instances for cleanup
+var chartInstances = {};
 
-function etfFieldsHTML(prefix, idx) {
-  return '<div class="form-group"><label>ETF 名稱</label><input type="text" id="' + prefix + 'Name' + idx + '" value="0050"></div>'
-    + '<div class="form-group"><label>年 CAGR (%)</label><input type="number" id="' + prefix + 'Cagr' + idx + '" value="8" step="0.1"></div>'
-    + '<div class="form-group"><label>年 LAIR (%)</label><input type="number" id="' + prefix + 'Lair' + idx + '" value="4" step="0.1"></div>'
-    + '<div class="form-group"><label>配息頻率</label><select id="' + prefix + 'Freq' + idx + '">'
-    + '<option value="semi-annual">半年配</option><option value="quarterly">季配</option></select></div>';
+function etfSelectHTML(prefix, idx) {
+  var html = '<select id="' + prefix + 'Etf' + idx + '" onchange="onInvETFChange(\'' + prefix + '\',' + idx + ')">';
+  for (var i = 0; i < ETF_CATALOG.length; i++) {
+    var e = ETF_CATALOG[i];
+    html += '<option value="' + e.id + '">' + e.id + ' ' + e.name + '</option>';
+  }
+  html += '</select>';
+  return html;
+}
+
+function confidenceHTML(prefix, idx) {
+  return '<div class="confidence-group">' +
+    '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="high" checked>高</label>' +
+    '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="mid">中</label>' +
+    '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="low">低</label>' +
+    '</div>';
 }
 
 function addLumpSum() {
   var i = lumpSumCount++;
   var div = document.createElement('div');
-  div.className = 'investment-row';
+  div.className = 'investment-block';
   div.id = 'ls' + i;
-  div.innerHTML = '<div class="form-group"><label>投入金額</label><input type="number" id="lsAmt' + i + '" value="1000000" min="0" step="10000"></div>'
-    + etfFieldsHTML('ls', i)
-    + '<button class="btn btn-sm btn-danger" onclick="removeLumpSum(' + i + ')">刪除</button>';
+  div.innerHTML =
+    '<div class="investment-header">' +
+      '<div class="form-group"><label>投入金額</label><input type="number" id="lsAmt' + i + '" value="1000000" min="0" step="10000"></div>' +
+      '<div class="form-group"><label>選擇 ETF</label>' + etfSelectHTML('ls', i) + '</div>' +
+      '<div class="form-group"><label>信心度</label>' + confidenceHTML('ls', i) + '</div>' +
+      '<button class="btn btn-sm btn-danger" onclick="removeLumpSum(' + i + ')">刪除</button>' +
+    '</div>' +
+    '<div id="lsEtfInfo' + i + '" class="etf-info show">' + etfInfoHTML(ETF_CATALOG[0]) + '</div>' +
+    '<div id="lsToggle' + i + '" class="detail-toggle" onclick="toggleDetail(\'ls\',' + i + ')">&#9654; 展開月明細</div>' +
+    '<div id="lsDetail' + i + '" class="detail-content"></div>';
   document.getElementById('lumpSumList').appendChild(div);
 }
 
-function removeLumpSum(i) { var el = document.getElementById('ls' + i); if (el) el.remove(); }
+function removeLumpSum(i) { var el = document.getElementById('ls' + i); if (el) el.remove(); delete lsSimResults[i]; destroyChart('ls' + i); }
 
 function addDCA() {
   var i = dcaCount++;
   var div = document.createElement('div');
-  div.className = 'investment-row';
+  div.className = 'investment-block';
   div.id = 'dca' + i;
-  div.innerHTML = '<div class="form-group"><label>每月金額</label><input type="number" id="dcaAmt' + i + '" value="10000" min="0" step="1000"></div>'
-    + etfFieldsHTML('dca', i)
-    + '<button class="btn btn-sm btn-danger" onclick="removeDCA(' + i + ')">刪除</button>';
+  div.innerHTML =
+    '<div class="investment-header">' +
+      '<div class="form-group"><label>每月金額</label><input type="number" id="dcaAmt' + i + '" value="10000" min="0" step="1000"></div>' +
+      '<div class="form-group"><label>選擇 ETF</label>' + etfSelectHTML('dca', i) + '</div>' +
+      '<div class="form-group"><label>信心度</label>' + confidenceHTML('dca', i) + '</div>' +
+      '<button class="btn btn-sm btn-danger" onclick="removeDCA(' + i + ')">刪除</button>' +
+    '</div>' +
+    '<div id="dcaEtfInfo' + i + '" class="etf-info show">' + etfInfoHTML(ETF_CATALOG[0]) + '</div>' +
+    '<div id="dcaToggle' + i + '" class="detail-toggle" onclick="toggleDetail(\'dca\',' + i + ')">&#9654; 展開月明細</div>' +
+    '<div id="dcaDetail' + i + '" class="detail-content"></div>';
   document.getElementById('dcaList').appendChild(div);
 }
 
-function removeDCA(i) { var el = document.getElementById('dca' + i); if (el) el.remove(); }
+function removeDCA(i) { var el = document.getElementById('dca' + i); if (el) el.remove(); delete dcaSimResults[i]; destroyChart('dca' + i); }
 
-function readETF(prefix, idx) {
-  return {
-    name: document.getElementById(prefix + 'Name' + idx).value,
-    annualCAGR: parseFloat(document.getElementById(prefix + 'Cagr' + idx).value) / 100,
-    annualLAIR: parseFloat(document.getElementById(prefix + 'Lair' + idx).value) / 100,
-    dividendFrequency: document.getElementById(prefix + 'Freq' + idx).value
-  };
+function onInvETFChange(prefix, idx) {
+  var sel = document.getElementById(prefix + 'Etf' + idx);
+  var infoEl = document.getElementById(prefix + 'EtfInfo' + idx);
+  if (sel && infoEl) {
+    var etf = getETFById(sel.value);
+    infoEl.textContent = etfInfoHTML(etf);
+  }
+}
+
+function onRetETFChange() {
+  var sel = document.getElementById('retETFSelect');
+  var infoEl = document.getElementById('retETFInfo');
+  if (sel && infoEl) {
+    var etf = getETFById(sel.value);
+    infoEl.textContent = etfInfoHTML(etf);
+  }
+}
+
+function readInvETF(prefix, idx) {
+  var sel = document.getElementById(prefix + 'Etf' + idx);
+  return getETFById(sel.value);
+}
+
+function readConfidence(prefix, idx) {
+  var radios = document.getElementsByName(prefix + 'Conf' + idx);
+  for (var j = 0; j < radios.length; j++) {
+    if (radios[j].checked) return radios[j].value;
+  }
+  return 'high';
 }
 
 function onStrategyChange() {
@@ -617,23 +812,182 @@ function fmt(n) {
   if (n === undefined || n === null) return '-';
   return n.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
 }
+function fmtD(n) { return n.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtDate(d) { return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(); }
+function fmtPct(n) { return (n * 100).toFixed(4) + '%'; }
 
-function fmtD(n) {
-  return n.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// ============================================================
+// Detail toggle & chart
+// ============================================================
+
+function toggleDetail(prefix, idx) {
+  var content = document.getElementById(prefix + 'Detail' + idx);
+  var toggle = document.getElementById(prefix + 'Toggle' + idx);
+  if (!content) return;
+  var isOpen = content.classList.contains('open');
+  if (isOpen) {
+    content.classList.remove('open');
+    toggle.innerHTML = '&#9654; 展開月明細';
+  } else {
+    content.classList.add('open');
+    toggle.innerHTML = '&#9660; 收合月明細';
+    // Render detail if not already rendered
+    if (!content.dataset.rendered) {
+      var simResults = (prefix === 'ls') ? lsSimResults : dcaSimResults;
+      var data = simResults[idx];
+      if (data) renderDetail(prefix, idx, data);
+    }
+  }
 }
 
-function fmtDate(d) {
-  return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+function renderDetail(prefix, idx, simResult) {
+  var container = document.getElementById(prefix + 'Detail' + idx);
+  if (!container) return;
+  var details = simResult.monthlyDetails;
+
+  // Build table
+  var html = '<div class="table-wrap"><table><thead><tr>' +
+    '<th>月</th><th>年/月</th><th>期初餘額</th><th>購買</th><th>CAGR增值</th><th>配息</th><th>期末餘額</th><th>PV@NOW</th><th>PV@60</th>' +
+    '</tr></thead><tbody>';
+  for (var i = 0; i < details.length; i++) {
+    var d = details[i];
+    html += '<tr>' +
+      '<td>' + d.month + '</td>' +
+      '<td>' + d.calendarYear + '/' + d.calendarMonth + '</td>' +
+      '<td>$' + fmt(d.beginBalance) + '</td>' +
+      '<td>' + (d.purchase > 0 ? '$' + fmt(d.purchase) : '-') + '</td>' +
+      '<td>$' + fmt(d.cagrGrowth) + '</td>' +
+      '<td>' + (d.dividend > 0 ? '$' + fmt(d.dividend) : '-') + '</td>' +
+      '<td>$' + fmt(d.endBalance) + '</td>' +
+      '<td>$' + fmt(d.pvNow) + '</td>' +
+      '<td>$' + fmt(d.pv60) + '</td>' +
+      '</tr>';
+  }
+  html += '</tbody></table></div>';
+
+  // Chart canvas
+  html += '<div class="chart-container"><canvas id="chart_' + prefix + idx + '" height="250"></canvas></div>';
+
+  container.innerHTML = html;
+  container.dataset.rendered = '1';
+
+  // Render chart
+  renderInvestmentChart(prefix + idx, details);
 }
 
-function fmtPct(n) {
-  return (n * 100).toFixed(4) + '%';
+function destroyChart(key) {
+  if (chartInstances[key]) {
+    chartInstances[key].destroy();
+    delete chartInstances[key];
+  }
 }
+
+function renderInvestmentChart(key, details) {
+  destroyChart(key);
+  var canvas = document.getElementById('chart_' + key);
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+
+  var labels = [];
+  var nominalData = [];
+  var pvNowData = [];
+  var pv60Data = [];
+
+  for (var i = 0; i < details.length; i++) {
+    var d = details[i];
+    labels.push(d.calendarYear + '/' + d.calendarMonth);
+    nominalData.push(d.nominal);
+    pvNowData.push(d.pvNow);
+    pv60Data.push(d.pv60);
+  }
+
+  // Show every Nth label to avoid crowding
+  var step = Math.max(1, Math.floor(labels.length / 24));
+
+  chartInstances[key] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: '名目價值',
+          data: nominalData,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37,99,235,0.08)',
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3
+        },
+        {
+          label: 'PV@NOW',
+          data: pvNowData,
+          borderColor: '#16a34a',
+          borderWidth: 2,
+          borderDash: [6, 3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3
+        },
+        {
+          label: 'PV@60',
+          data: pv60Data,
+          borderColor: '#7c3aed',
+          borderWidth: 2,
+          borderDash: [2, 4],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+            }
+          }
+        },
+        legend: { position: 'top' }
+      },
+      scales: {
+        x: {
+          ticks: {
+            maxTicksLimit: 24,
+            callback: function(val, index) {
+              return index % step === 0 ? this.getLabelForValue(val) : '';
+            }
+          }
+        },
+        y: {
+          ticks: {
+            callback: function(val) { return '$' + val.toLocaleString('zh-TW', { maximumFractionDigits: 0 }); }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ============================================================
+// Main Calculation
+// ============================================================
 
 function runCalculation() {
   var errBox = document.getElementById('errorBox');
   errBox.textContent = '';
   document.getElementById('results').style.display = 'none';
+
+  // Reset previous detail renders
+  lsSimResults = {};
+  dcaSimResults = {};
+  for (var ck in chartInstances) { chartInstances[ck].destroy(); }
+  chartInstances = {};
 
   try {
     // Read basic settings
@@ -654,46 +1008,70 @@ function runCalculation() {
       annualCPI: parseFloat(document.getElementById('annualCPI').value) / 100
     };
 
-    // Calculate derived
     var derived = calculateDerived(basicSettings);
 
     // Read Module A
     var lsList = document.getElementById('lumpSumList').children;
-    var lumpSums = [];
+    var lumpSumTotal = 0;
     for (var i = 0; i < lsList.length; i++) {
       var el = lsList[i];
       var idx = el.id.replace('ls', '');
       var amtEl = document.getElementById('lsAmt' + idx);
       if (!amtEl) continue;
-      lumpSums.push({ amount: parseFloat(amtEl.value), etf: readETF('ls', idx) });
+      var inv = {
+        amount: parseFloat(amtEl.value),
+        etf: readInvETF('ls', idx),
+        confidence: readConfidence('ls', idx)
+      };
+      var simRes = simulateLumpSumDetailed(inv, basicSettings, derived);
+      lumpSumTotal += simRes.finalValue;
+      lsSimResults[idx] = simRes;
+      // Show toggle
+      var toggle = document.getElementById('lsToggle' + idx);
+      if (toggle) toggle.style.display = 'block';
+      // Clear previous detail render
+      var detailEl = document.getElementById('lsDetail' + idx);
+      if (detailEl) { detailEl.innerHTML = ''; detailEl.dataset.rendered = ''; detailEl.classList.remove('open'); }
+      if (toggle) toggle.innerHTML = '&#9654; 展開月明細';
     }
 
     var dcaListEl = document.getElementById('dcaList').children;
-    var dcas = [];
+    var dcaTotal = 0;
     for (var i = 0; i < dcaListEl.length; i++) {
       var el = dcaListEl[i];
       var idx = el.id.replace('dca', '');
       var amtEl = document.getElementById('dcaAmt' + idx);
       if (!amtEl) continue;
-      dcas.push({ monthlyAmount: parseFloat(amtEl.value), etf: readETF('dca', idx) });
+      var inv = {
+        monthlyAmount: parseFloat(amtEl.value),
+        etf: readInvETF('dca', idx),
+        confidence: readConfidence('dca', idx)
+      };
+      var simRes = simulateDCADetailed(inv, basicSettings, derived);
+      dcaTotal += simRes.finalValue;
+      dcaSimResults[idx] = simRes;
+      var toggle = document.getElementById('dcaToggle' + idx);
+      if (toggle) toggle.style.display = 'block';
+      var detailEl = document.getElementById('dcaDetail' + idx);
+      if (detailEl) { detailEl.innerHTML = ''; detailEl.dataset.rendered = ''; detailEl.classList.remove('open'); }
+      if (toggle) toggle.innerHTML = '&#9654; 展開月明細';
     }
 
-    var accSettings = { lumpSumInvestments: lumpSums, dcaInvestments: dcas };
-    var accResult = calculateAccumulation(accSettings, basicSettings, derived);
+    var accResult = {
+      lumpSumTotal: lumpSumTotal,
+      dcaTotal: dcaTotal,
+      totalAtRetirement: lumpSumTotal + dcaTotal
+    };
 
     // Read Module B
     var strategy = document.querySelector('input[name="strategy"]:checked').value;
     var wRate = parseFloat(document.getElementById('withdrawalRate').value) / 100;
+    var retETF = getETFById(document.getElementById('retETFSelect').value);
 
     var distSettings = {
       strategy: strategy,
       withdrawalRate: wRate,
-      retirementETF: {
-        name: document.getElementById('retETFName').value,
-        annualCAGR: parseFloat(document.getElementById('retETFCagr').value) / 100,
-        annualLAIR: parseFloat(document.getElementById('retETFLair').value) / 100,
-        dividendFrequency: document.getElementById('retETFFreq').value
-      },
+      retirementETF: retETF,
       laborPensionLumpSum: parseFloat(document.getElementById('laborPension').value) || 0,
       otherAssets: parseFloat(document.getElementById('otherAssets').value) || 0,
       laborInsuranceMonthly: parseFloat(document.getElementById('laborInsurance').value) || 0,
@@ -743,7 +1121,6 @@ function runCalculation() {
       tbody.appendChild(tr);
     }
 
-    // Scroll to results
     document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
 
   } catch (e) {
@@ -751,7 +1128,9 @@ function runCalculation() {
   }
 }
 
-// --- Initialize ---
+// ============================================================
+// Initialize
+// ============================================================
 (function init() {
   // Set today's date
   var today = new Date();
@@ -760,7 +1139,32 @@ function runCalculation() {
   var d = String(today.getDate()).padStart(2, '0');
   document.getElementById('calcDate').value = y + '-' + m + '-' + d;
 
-  // Add one default lump sum and one default DCA
+  // Render ETF catalog table
+  var tbody = document.getElementById('etfCatalogBody');
+  for (var i = 0; i < ETF_CATALOG.length; i++) {
+    var e = ETF_CATALOG[i];
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td><strong>' + e.id + '</strong></td>'
+      + '<td>' + e.name + '</td>'
+      + '<td>' + e.yearsEstablished + ' 年</td>'
+      + '<td>' + (e.annualCAGR * 100).toFixed(2) + '%</td>'
+      + '<td>' + (e.annualLAIR * 100).toFixed(2) + '%</td>'
+      + '<td>' + etfMonthsStr(e.dividendMonths) + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  // Populate retirement ETF dropdown
+  var retSel = document.getElementById('retETFSelect');
+  for (var i = 0; i < ETF_CATALOG.length; i++) {
+    var e = ETF_CATALOG[i];
+    var opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = e.id + ' ' + e.name;
+    retSel.appendChild(opt);
+  }
+  onRetETFChange();
+
+  // Add default investments
   addLumpSum();
   addDCA();
 })();
