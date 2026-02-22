@@ -418,6 +418,36 @@
       </div>
     </div>
 
+    <h3>國民年金老年年金試算</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>月投保金額</label>
+        <input type="number" id="npMonthlyIns" value="21103" min="0" step="100">
+        <span class="hint">2026 年為 21,103 元</span>
+      </div>
+      <div class="form-group">
+        <label>國民年金保險年資</label>
+        <div class="inline-fields">
+          <input type="number" id="npInsYears" value="5" min="0" max="50" step="1">
+          <span class="unit">年</span>
+          <input type="number" id="npInsMonths" value="7" min="0" max="11" step="1">
+          <span class="unit">月</span>
+          <input type="number" id="npInsDays" value="13" min="0" max="30" step="1">
+          <span class="unit">日</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>保險年資（自動計算）</label>
+        <span id="npPensionYears" style="font-weight:600; padding:8px 0;">—</span>
+      </div>
+    </div>
+    <div class="btn-center" style="margin:12px 0;">
+      <button class="btn btn-primary btn-sm" onclick="runNatPenCalc()" style="padding:8px 28px;">試算國民年金</button>
+    </div>
+    <div id="npResults" style="display:none;">
+      <div id="npSummary"></div>
+    </div>
+
     <h3>國家老年給付（月付）</h3>
     <div class="form-grid">
       <div class="form-group">
@@ -428,6 +458,7 @@
       <div class="form-group">
         <label>國民年金（月付）</label>
         <input type="number" id="nationalPension" value="5000" min="0" step="100">
+        <span id="npAutoFillHint" class="hint" style="display:none; color:var(--success);"></span>
       </div>
     </div>
   </div>
@@ -732,8 +763,9 @@ function calculateTotalRetirementAssets(accR, distS) {
 
 // Generic monthly distribution simulation.
 // getGrossWithdrawal(assets, yearIdx) returns the gross amount to sell at the start of that year.
-function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns, natPen, getGrossWithdrawal, labInsStartMonth) {
+function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns, natPen, getGrossWithdrawal, labInsStartMonth, natPenStartMonth) {
   if (!labInsStartMonth) labInsStartMonth = 1;
+  if (!natPenStartMonth) natPenStartMonth = 1;
   var details = [];
   var a = total;
   var cm = retDate.getMonth() + 1;
@@ -763,12 +795,14 @@ function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns,
 
     // Labor insurance only starts at labInsStartMonth
     var effectiveLabIns = (m >= labInsStartMonth) ? labIns : 0;
+    // National pension only starts at natPenStartMonth (age 65y0m)
+    var effectiveNatPen = (m >= natPenStartMonth) ? natPen : 0;
 
     // PV calculations: mfR = months from retirement, mfN = months from now
     var mfR = m;
     var mfN = ip + m;
     var etfMonthly = currentYearNetW / 12;
-    var monthlyAvail = etfMonthly + effectiveLabIns + natPen;
+    var monthlyAvail = etfMonthly + effectiveLabIns + effectiveNatPen;
 
     details.push({
       month: m, calendarYear: cy, calendarMonth: cm, year: yearIdx,
@@ -784,7 +818,7 @@ function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns,
       monthlyAvailPV60: round2(monthlyAvail / Math.pow(1 + mcpi, mfR)),
       monthlyETFWithdraw: round2(etfMonthly),
       monthlyLaborIns: round2(effectiveLabIns),
-      monthlyNatPen: round2(natPen)
+      monthlyNatPen: round2(effectiveNatPen)
     });
 
     cm++;
@@ -825,7 +859,7 @@ function findConstantPVAmount(total, etf, retDate, years, annCPI) {
   return (low + high) / 2;
 }
 
-function calculateDistribution(accR, distS, basicS, derived, labInsStartMonth) {
+function calculateDistribution(accR, distS, basicS, derived, labInsStartMonth, natPenStartMonth) {
   var total = calculateTotalRetirementAssets(accR, distS);
   var years = Math.ceil(derived.distributionPeriodMonths / 12);
   var totalMonths = years * 12;
@@ -855,7 +889,7 @@ function calculateDistribution(accR, distS, basicS, derived, labInsStartMonth) {
   }
 
   var monthlyDetails = simulateDistMonthly(total, etf, derived.retirementDate, totalMonths,
-    mcpi, ip, labIns, natPen, getGrossW, labInsStartMonth || 1);
+    mcpi, ip, labIns, natPen, getGrossW, labInsStartMonth || 1, natPenStartMonth || 1);
 
   var last = monthlyDetails[monthlyDetails.length - 1];
   return {
@@ -1303,6 +1337,82 @@ function applyLumpSum() {
   document.getElementById('otherAssets').value = Math.round(other + best.lumpSum);
 }
 
+// ============================================================
+// 國民年金老年年金 Calculator
+// ============================================================
+
+// Convert NP insurance years+months+days to decimal years
+// 保險年資 = (Y*12 + M + D/30) / 12
+function npInsuranceDecimal(years, months, days) {
+  return round2((years * 12 + months + days / 30) / 12);
+}
+
+function updateNpYearsDisplay() {
+  var y = parseInt(document.getElementById('npInsYears').value) || 0;
+  var m = parseInt(document.getElementById('npInsMonths').value) || 0;
+  var d = parseInt(document.getElementById('npInsDays').value) || 0;
+  var dec = npInsuranceDecimal(y, m, d);
+  document.getElementById('npPensionYears').textContent = dec.toFixed(4) + ' 年';
+}
+
+function runNatPenCalc() {
+  var monthlyIns = parseFloat(document.getElementById('npMonthlyIns').value) || 0;
+  var y = parseInt(document.getElementById('npInsYears').value) || 0;
+  var m = parseInt(document.getElementById('npInsMonths').value) || 0;
+  var d = parseInt(document.getElementById('npInsDays').value) || 0;
+  var insYears = npInsuranceDecimal(y, m, d);
+
+  updateNpYearsDisplay();
+
+  // Check if 勞保老年年金 > 0 → must use B式
+  var labInsVal = parseFloat(document.getElementById('laborInsurance').value) || 0;
+  var useOnlyB = labInsVal > 0;
+
+  // A式: 月投保金額 × 保險年資 × 0.65% + 4049
+  var npA = round2(monthlyIns * insYears * 0.0065 + 4049);
+  // B式: 月投保金額 × 保險年資 × 1.3%
+  var npB = round2(monthlyIns * insYears * 0.013);
+
+  var chosen, formulaName;
+  if (useOnlyB) {
+    chosen = npB;
+    formulaName = 'B式（有領勞保年金，不適用A式）';
+  } else if (npA >= npB) {
+    chosen = npA;
+    formulaName = 'A式';
+  } else {
+    chosen = npB;
+    formulaName = 'B式';
+  }
+
+  // Show results
+  document.getElementById('npResults').style.display = 'block';
+  var h = '<div class="blra-result-box">';
+  h += '<div class="blra-title">國民年金老年年金試算結果（65歲0月開始請領）</div>';
+  h += '<div class="blra-grid">';
+  h += '<div class="blra-item"><div class="label">保險年資</div><div class="value">' + insYears.toFixed(4) + ' 年</div></div>';
+  h += '<div class="blra-item"><div class="label">A式月領</div><div class="value">' + (useOnlyB ? '<s>$' + fmt(npA) + '</s> 不適用' : '$' + fmt(npA)) + '</div></div>';
+  h += '<div class="blra-item"><div class="label">B式月領</div><div class="value">$' + fmt(npB) + '</div></div>';
+  h += '<div class="blra-item green"><div class="label">採用 ' + formulaName + '</div><div class="value">$' + fmt(chosen) + '/月</div></div>';
+  h += '</div>';
+  h += '<div style="margin-top:14px;">';
+  h += '<button class="btn btn-sm" style="background:var(--success); color:#fff; padding:6px 18px; font-size:0.85rem;" onclick="applyNatPen()">套用至國民年金欄位</button>';
+  h += '</div>';
+  h += '</div>';
+  document.getElementById('npSummary').innerHTML = h;
+
+  // Store for apply
+  window._npResult = { monthly: chosen, formulaName: formulaName };
+}
+
+function applyNatPen() {
+  if (!window._npResult) return;
+  document.getElementById('nationalPension').value = Math.round(window._npResult.monthly);
+  var hint = document.getElementById('npAutoFillHint');
+  hint.style.display = 'block';
+  hint.textContent = window._npResult.formulaName + '，65歲0月開始請領';
+}
+
 function fmt(n) {
   if (n === undefined || n === null) return '-';
   return n.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
@@ -1735,7 +1845,12 @@ function runCalculation() {
       labInsStartMonth = Math.max(1, mFromRet + 1);
     }
 
-    var distResult = calculateDistribution(accResult, distSettings, basicSettings, derived, labInsStartMonth);
+    // Compute natPenStartMonth: 國民年金 starts at age 65y0m
+    var age65Date = addYearsToDate(basicSettings.birthDate, 65);
+    var mFromRetTo65 = Math.floor(calcMonthsDiff(derived.retirementDate, age65Date));
+    var natPenStartMonth = Math.max(1, mFromRetTo65 + 1);
+
+    var distResult = calculateDistribution(accResult, distSettings, basicSettings, derived, labInsStartMonth, natPenStartMonth);
 
     // --- Compute age marker lines & tooltip age info for charts ---
     var ip = derived.investmentPeriodMonths;
@@ -1801,6 +1916,19 @@ function runCalculation() {
           color: 'rgba(16,185,129,0.8)',
           label: 'BLRA ' + blraAgeY + '歲' + blraAgeM + '月',
           bgColor: 'rgba(16,185,129,0.9)'
+        });
+      }
+    }
+
+    // 國民年金 marker at age 65y0m (if national pension > 0 and 65 is within chart range)
+    if (distSettings.nationalPensionMonthly > 0) {
+      var np65Idx = (65 - chartStartAge) * 12;
+      if (np65Idx >= 0 && np65Idx < chartDistData.length) {
+        globalAgeLines.dist.push({
+          index: np65Idx,
+          color: 'rgba(245,158,11,0.8)',
+          label: '國民年金 65歲',
+          bgColor: 'rgba(245,158,11,0.9)'
         });
       }
     }
@@ -2092,6 +2220,12 @@ function exportPDF() {
   document.getElementById('liInsYears').addEventListener('input', updatePensionYearsDisplay);
   document.getElementById('liInsDays').addEventListener('input', updatePensionYearsDisplay);
   updatePensionYearsDisplay();
+
+  // Auto-update NP years display
+  document.getElementById('npInsYears').addEventListener('input', updateNpYearsDisplay);
+  document.getElementById('npInsMonths').addEventListener('input', updateNpYearsDisplay);
+  document.getElementById('npInsDays').addEventListener('input', updateNpYearsDisplay);
+  updateNpYearsDisplay();
 })();
 </script>
 </body>
