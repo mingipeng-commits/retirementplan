@@ -367,7 +367,8 @@
     <div class="radio-group">
       <label><input type="radio" name="strategy" value="fixed-rate" checked onchange="onStrategyChange()">固定比率提領</label>
       <label><input type="radio" name="strategy" value="increasing-rate" onchange="onStrategyChange()">遞增比率提領</label>
-      <label><input type="radio" name="strategy" value="constant-pv" onchange="onStrategyChange()">等現值提領</label>
+      <label><input type="radio" name="strategy" value="constant-pv" onchange="onStrategyChange()">等現值提領 (無遺產)</label>
+      <label><input type="radio" name="strategy" value="constant-pv-estate" onchange="onStrategyChange()">等現值提領 (有遺產)</label>
     </div>
     <div id="strategyDesc" class="strategy-desc">每年年初固定領出資產的 x%，壽命結束當下未領出的資產為遺產。</div>
     <div id="withdrawalRateGroup" class="form-grid" style="max-width:300px;">
@@ -375,6 +376,13 @@
         <label>年提領比率 x (%)</label>
         <input type="number" id="withdrawalRate" value="4" min="1" max="12" step="0.5">
         <span class="hint">1% ~ 12%</span>
+      </div>
+    </div>
+    <div id="estateReserveGroup" class="form-grid hidden" style="max-width:300px;">
+      <div class="form-group">
+        <label>預留遺產金額</label>
+        <input type="number" id="estateReserve" value="0" min="0" step="10000">
+        <span class="hint">須低於退休當下可分配財產</span>
       </div>
     </div>
 
@@ -845,7 +853,9 @@ function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns,
 }
 
 // Fast annual-level simulation for constant-PV binary search
-function findConstantPVAmount(total, etf, retDate, years, annCPI) {
+// targetRemaining: the desired remaining balance at end of life (default 0)
+function findConstantPVAmount(total, etf, retDate, years, annCPI, targetRemaining) {
+  if (!targetRemaining) targetRemaining = 0;
   var low = 0, high = total, tol = 1;
   var rm = retDate.getMonth() + 1;
   function simRemaining(pv60) {
@@ -869,8 +879,8 @@ function findConstantPVAmount(total, etf, retDate, years, annCPI) {
   for (var iter = 0; iter < 100; iter++) {
     var mid = (low + high) / 2;
     var r = simRemaining(mid);
-    if (r.fullyFunded && Math.abs(r.remaining) < tol) break;
-    if (!r.fullyFunded || r.remaining < 0) high = mid;
+    if (r.fullyFunded && Math.abs(r.remaining - targetRemaining) < tol) break;
+    if (!r.fullyFunded || r.remaining < targetRemaining) high = mid;
     else low = mid;
   }
   return (low + high) / 2;
@@ -895,6 +905,14 @@ function calculateDistribution(accR, distS, basicS, derived, labInsStartMonth, n
     getGrossW = function(assets, yearIdx) {
       var di = Math.floor((yearIdx - 1) / 10);
       return assets * (baseRate + di * 0.01);
+    };
+  } else if (distS.strategy === 'constant-pv-estate') {
+    var targetEstate = distS.estateReserve || 0;
+    var pv60Amt = findConstantPVAmount(total, etf, derived.retirementDate, years, basicS.annualCPI, targetEstate);
+    var annCPI = basicS.annualCPI;
+    getGrossW = function(assets, yearIdx) {
+      var nom = pv60Amt * Math.pow(1 + annCPI, yearIdx - 1);
+      return nom / (1 - SELL_FEE_RATE);
     };
   } else {
     var pv60Amt = findConstantPVAmount(total, etf, derived.retirementDate, years, basicS.annualCPI);
@@ -1206,15 +1224,23 @@ function onStrategyChange() {
   var v = document.querySelector('input[name="strategy"]:checked').value;
   var desc = document.getElementById('strategyDesc');
   var rg = document.getElementById('withdrawalRateGroup');
+  var eg = document.getElementById('estateReserveGroup');
   if (v === 'fixed-rate') {
     desc.textContent = '每年年初固定領出資產的 x%，壽命結束當下未領出的資產為遺產。';
     rg.classList.remove('hidden');
+    eg.classList.add('hidden');
   } else if (v === 'increasing-rate') {
     desc.textContent = '每年年初領出資產的 x%，x 每十年增加 1%（Year 1~10: x%, Year 11~20: x+1%, ...），壽命結束當下未領出的資產為遺產。';
     rg.classList.remove('hidden');
-  } else {
+    eg.classList.add('hidden');
+  } else if (v === 'constant-pv') {
     desc.textContent = '每年年初領出一筆金額，使每年回算到退休日的現值 (PV@60) 儘量相等，壽命結束時遺產歸零。';
     rg.classList.add('hidden');
+    eg.classList.add('hidden');
+  } else if (v === 'constant-pv-estate') {
+    desc.textContent = '預留指定遺產金額後，剩餘資產以等現值方式按月提領至壽命結束。';
+    rg.classList.add('hidden');
+    eg.classList.remove('hidden');
   }
 }
 
@@ -1851,9 +1877,12 @@ function runCalculation() {
     }
     var retETF = applyConfidence(retETFRaw, retConf);
 
+    var estateReserve = parseFloat(document.getElementById('estateReserve').value) || 0;
+
     var distSettings = {
       strategy: strategy,
       withdrawalRate: wRate,
+      estateReserve: estateReserve,
       retirementETF: retETF,
       laborPensionLumpSum: parseFloat(document.getElementById('laborPension').value) || 0,
       otherAssets: parseFloat(document.getElementById('otherAssets').value) || 0,
@@ -1873,6 +1902,15 @@ function runCalculation() {
     var age65Date = addYearsToDate(basicSettings.birthDate, 65);
     var mFromRetTo65 = Math.floor(calcMonthsDiff(derived.retirementDate, age65Date));
     var natPenStartMonth = Math.max(1, mFromRetTo65 + 1);
+
+    // Validate estate reserve
+    if (strategy === 'constant-pv-estate') {
+      var totalAssets = calculateTotalRetirementAssets(accResult, distSettings);
+      if (estateReserve >= totalAssets) {
+        alert('預留遺產金額（$' + fmt(estateReserve) + '）必須低於退休總資產（$' + fmt(totalAssets) + '）');
+        return;
+      }
+    }
 
     var distResult = calculateDistribution(accResult, distSettings, basicSettings, derived, labInsStartMonth, natPenStartMonth);
 
@@ -2004,15 +2042,20 @@ function runCalculation() {
     // Distribution summary (breakdown)
     var preETF = accResult.totalAtRetirement + distSettings.laborPensionLumpSum + distSettings.otherAssets;
     var buyFee = preETF * BUY_FEE_RATE;
-    document.getElementById('distSummary').innerHTML =
+    var distSumHtml =
       '<div class="summary-item"><div class="label">ETF 投資組合（Module A）</div><div class="value">$' + fmt(accResult.totalAtRetirement) + '</div></div>'
       + '<div class="summary-item"><div class="label">勞退新制一次領出</div><div class="value">$' + fmt(distSettings.laborPensionLumpSum) + '</div></div>'
       + '<div class="summary-item"><div class="label">其他退休資產</div><div class="value">$' + fmt(distSettings.otherAssets) + '</div></div>'
       + '<div class="summary-item"><div class="label">買入手續費</div><div class="value">-$' + fmt(buyFee) + '</div></div>'
-      + '<div class="summary-item accent"><div class="label">退休總資產（入ETF後）</div><div class="value">$' + fmt(distResult.totalRetirementAssets) + '</div></div>'
-      + '<div class="summary-item"><div class="label">勞保老年年金（月）</div><div class="value">$' + fmt(distSettings.laborInsuranceMonthly) + '</div></div>'
+      + '<div class="summary-item accent"><div class="label">退休總資產（入ETF後）</div><div class="value">$' + fmt(distResult.totalRetirementAssets) + '</div></div>';
+    if (strategy === 'constant-pv-estate') {
+      distSumHtml += '<div class="summary-item"><div class="label">預留遺產</div><div class="value">$' + fmt(distSettings.estateReserve) + '</div></div>';
+    }
+    distSumHtml +=
+      '<div class="summary-item"><div class="label">勞保老年年金（月）</div><div class="value">$' + fmt(distSettings.laborInsuranceMonthly) + '</div></div>'
       + '<div class="summary-item"><div class="label">國民年金（月）</div><div class="value">$' + fmt(distSettings.nationalPensionMonthly) + '</div></div>'
       + '<div class="summary-item green"><div class="label">壽命結束時遺產</div><div class="value">$' + fmt(distResult.estate) + '</div></div>';
+    document.getElementById('distSummary').innerHTML = distSumHtml;
 
     // Distribution table (monthly)
     var tbody = document.getElementById('distTableBody');
@@ -2080,7 +2123,7 @@ function exportPDF() {
   function sect(t) { return '<h2 style="font-size:15px;color:#1d4ed8;border-bottom:2px solid #2563eb;padding-bottom:4px;margin:24px 0 10px;">' + t + '</h2>'; }
   function kv(k, v) { return '<tr><td style="padding:4px 8px;color:#64748b;width:45%;border-bottom:1px solid #f1f5f9;">' + k + '</td><td style="padding:4px 8px;font-weight:600;border-bottom:1px solid #f1f5f9;">' + v + '</td></tr>'; }
   function kvTbl(rows) { return '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">' + rows + '</table>'; }
-  var stratNames = { 'fixed-rate': '固定比率提領', 'increasing-rate': '遞增比率提領', 'constant-pv': '等現值提領' };
+  var stratNames = { 'fixed-rate': '固定比率提領', 'increasing-rate': '遞增比率提領', 'constant-pv': '等現值提領 (無遺產)', 'constant-pv-estate': '等現值提領 (有遺產)' };
   var confNames = CONFIDENCE_NAMES;
 
   // Build report HTML
@@ -2130,7 +2173,8 @@ function exportPDF() {
   h += sect('Module B — 分配結果');
   h += kvTbl(
     kv('提領策略', stratNames[ds.strategy] || ds.strategy)
-    + (ds.strategy !== 'constant-pv' ? kv('提領比率', (ds.withdrawalRate * 100).toFixed(1) + '%') : '')
+    + (ds.strategy === 'fixed-rate' || ds.strategy === 'increasing-rate' ? kv('提領比率', (ds.withdrawalRate * 100).toFixed(1) + '%') : '')
+    + (ds.strategy === 'constant-pv-estate' ? kv('預留遺產', '$' + fmt(ds.estateReserve)) : '')
     + kv('退休 ETF', ds.retirementETF.id + ' ' + ds.retirementETF.name)
     + kv('退休總資產（入ETF後）', '$' + fmt(dr.totalRetirementAssets))
     + kv('勞保老年年金（月）', '$' + fmt(ds.laborInsuranceMonthly))
