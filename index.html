@@ -732,7 +732,8 @@ function calculateTotalRetirementAssets(accR, distS) {
 
 // Generic monthly distribution simulation.
 // getGrossWithdrawal(assets, yearIdx) returns the gross amount to sell at the start of that year.
-function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns, natPen, getGrossWithdrawal) {
+function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns, natPen, getGrossWithdrawal, labInsStartMonth) {
+  if (!labInsStartMonth) labInsStartMonth = 1;
   var details = [];
   var a = total;
   var cm = retDate.getMonth() + 1;
@@ -760,11 +761,14 @@ function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns,
     var cagrGrowth = beforeGrowth * annualToMonthlyRate(etf.annualCAGR);
     a = result.newPrincipal;
 
+    // Labor insurance only starts at labInsStartMonth
+    var effectiveLabIns = (m >= labInsStartMonth) ? labIns : 0;
+
     // PV calculations: mfR = months from retirement, mfN = months from now
     var mfR = m;
     var mfN = ip + m;
     var etfMonthly = currentYearNetW / 12;
-    var monthlyAvail = etfMonthly + labIns + natPen;
+    var monthlyAvail = etfMonthly + effectiveLabIns + natPen;
 
     details.push({
       month: m, calendarYear: cy, calendarMonth: cm, year: yearIdx,
@@ -779,7 +783,7 @@ function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns,
       monthlyAvailPVNow: round2(monthlyAvail / Math.pow(1 + mcpi, mfN)),
       monthlyAvailPV60: round2(monthlyAvail / Math.pow(1 + mcpi, mfR)),
       monthlyETFWithdraw: round2(etfMonthly),
-      monthlyLaborIns: round2(labIns),
+      monthlyLaborIns: round2(effectiveLabIns),
       monthlyNatPen: round2(natPen)
     });
 
@@ -821,7 +825,7 @@ function findConstantPVAmount(total, etf, retDate, years, annCPI) {
   return (low + high) / 2;
 }
 
-function calculateDistribution(accR, distS, basicS, derived) {
+function calculateDistribution(accR, distS, basicS, derived, labInsStartMonth) {
   var total = calculateTotalRetirementAssets(accR, distS);
   var years = Math.ceil(derived.distributionPeriodMonths / 12);
   var totalMonths = years * 12;
@@ -851,7 +855,7 @@ function calculateDistribution(accR, distS, basicS, derived) {
   }
 
   var monthlyDetails = simulateDistMonthly(total, etf, derived.retirementDate, totalMonths,
-    mcpi, ip, labIns, natPen, getGrossW);
+    mcpi, ip, labIns, natPen, getGrossW, labInsStartMonth || 1);
 
   var last = monthlyDetails[monthlyDetails.length - 1];
   return {
@@ -1272,6 +1276,13 @@ function applyBLRA() {
   if (!window._blraResult) return;
   var best = window._blraResult;
   document.getElementById('laborInsurance').value = Math.round(best.adjustedMonthly);
+  // Store BLRA info for distribution calculation and chart markers
+  window._blraApplied = {
+    date: new Date(best.lraDate.getTime()),
+    ageY: best.lraAgeY,
+    ageM: best.lraAgeM,
+    monthly: best.adjustedMonthly
+  };
   var hint = document.getElementById('liAutoFillHint');
   hint.style.display = 'block';
   hint.textContent = 'BLRA ' + best.lraAgeY + '歲' + best.lraAgeM + '月 (' + fmtDate(best.lraDate) + ') 開始請領';
@@ -1282,6 +1293,8 @@ function applyLumpSum() {
   var best = window._blraResult;
   // Clear labor insurance monthly (not using annuity)
   document.getElementById('laborInsurance').value = 0;
+  // Clear BLRA since we chose lump sum
+  window._blraApplied = null;
   var hint = document.getElementById('liAutoFillHint');
   hint.style.display = 'block';
   hint.textContent = '選擇一次領 $' + fmt(best.lumpSum) + '，已加入其他退休資產';
@@ -1714,7 +1727,15 @@ function runCalculation() {
       nationalPensionMonthly: parseFloat(document.getElementById('nationalPension').value) || 0
     };
 
-    var distResult = calculateDistribution(accResult, distSettings, basicSettings, derived);
+    // Compute labInsStartMonth from BLRA (if applied)
+    var labInsStartMonth = 1;
+    if (window._blraApplied) {
+      var blraDate = window._blraApplied.date;
+      var mFromRet = Math.floor(calcMonthsDiff(derived.retirementDate, blraDate));
+      labInsStartMonth = Math.max(1, mFromRet + 1);
+    }
+
+    var distResult = calculateDistribution(accResult, distSettings, basicSettings, derived, labInsStartMonth);
 
     // --- Compute age marker lines & tooltip age info for charts ---
     var ip = derived.investmentPeriodMonths;
@@ -1766,6 +1787,21 @@ function runCalculation() {
       var months60Idx = Math.floor(calcMonthsDiff(derived.retirementDate, age60Date)) - 1;
       if (months60Idx >= 0 && months60Idx < chartDistData.length) {
         globalAgeLines.dist.push({ index: months60Idx, color: 'rgba(220,38,38,0.7)', label: '60歲', bgColor: 'rgba(220,38,38,0.85)' });
+      }
+    }
+
+    // BLRA marker on Module B charts
+    if (window._blraApplied) {
+      var blraAgeY = window._blraApplied.ageY;
+      var blraAgeM = window._blraApplied.ageM;
+      var blraChartIdx = (blraAgeY - chartStartAge) * 12 + blraAgeM;
+      if (blraChartIdx >= 0 && blraChartIdx < chartDistData.length) {
+        globalAgeLines.dist.push({
+          index: blraChartIdx,
+          color: 'rgba(16,185,129,0.8)',
+          label: 'BLRA ' + blraAgeY + '歲' + blraAgeM + '月',
+          bgColor: 'rgba(16,185,129,0.9)'
+        });
       }
     }
 
