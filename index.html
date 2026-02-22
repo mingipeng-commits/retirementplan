@@ -186,6 +186,17 @@
   th { background: #f1f5f9; font-weight: 600; color: var(--text-light); position: sticky; top: 0; z-index: 1; }
   td:first-child, th:first-child { text-align: center; }
   .table-wrap { max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .blra-best { background: #fef9c3 !important; font-weight: 700; }
+  .blra-result-box { background: linear-gradient(135deg, #eff6ff, #dbeafe); border-radius: 10px; padding: 20px; margin: 16px 0; }
+  .blra-result-box .blra-title { font-size: 1rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 10px; }
+  .blra-result-box .blra-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .blra-result-box .blra-item .label { font-size: 0.78rem; color: var(--text-light); }
+  .blra-result-box .blra-item .value { font-size: 1.15rem; font-weight: 700; color: var(--primary-dark); }
+  .blra-result-box .blra-item.accent .value { color: var(--accent); }
+  .blra-result-box .blra-item.green .value { color: var(--success); }
+  .inline-fields { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .inline-fields input { width: 80px; }
+  .inline-fields .unit { font-size: 0.85rem; color: var(--text-light); }
   .chart-container { margin-top: 12px; max-height: 300px; }
 
   .summary-grid {
@@ -351,11 +362,68 @@
       </div>
     </div>
 
+    <h3>勞保老年年金試算</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>平均月投保薪資</label>
+        <input type="number" id="liAvgSalary" value="45800" min="0" step="100">
+      </div>
+      <div class="form-group">
+        <label>投保年資（今日）</label>
+        <div class="inline-fields">
+          <input type="number" id="liInsYears" value="24" min="0" max="50" step="1">
+          <span class="unit">年</span>
+          <input type="number" id="liInsDays" value="221" min="0" max="364" step="1">
+          <span class="unit">天</span>
+        </div>
+        <span class="hint">依勞保局 E 化服務系統資料填入</span>
+      </div>
+      <div class="form-group">
+        <label>年金給付年資（自動計算）</label>
+        <span id="liPensionYears" style="font-weight:600; padding:8px 0;">—</span>
+      </div>
+      <div class="form-group">
+        <label>是否還在保</label>
+        <div class="radio-group" style="margin-top:4px;">
+          <label><input type="radio" name="liStillInsured" value="yes" checked>是（還在保）</label>
+          <label><input type="radio" name="liStillInsured" value="no">否（已停保）</label>
+        </div>
+      </div>
+    </div>
+    <div class="btn-center" style="margin:12px 0;">
+      <button class="btn btn-primary btn-sm" onclick="runLaborInsCalc()" style="padding:8px 28px;">試算勞保老年年金</button>
+    </div>
+    <div id="liResults" style="display:none;">
+      <div id="liSummary"></div>
+      <h4 style="margin:16px 0 6px; color:var(--accent);">121 種 LRA 方案比較</h4>
+      <div class="table-wrap" style="max-height:350px;">
+        <table>
+          <thead>
+            <tr>
+              <th>LRA 歲月</th>
+              <th>年資</th>
+              <th>A式(月)</th>
+              <th>B式(月)</th>
+              <th>調整%</th>
+              <th>調整後月領</th>
+              <th>請領月數</th>
+              <th>名目總額</th>
+              <th>PV@60總額</th>
+              <th>一次金</th>
+              <th>一次金PV@60</th>
+            </tr>
+          </thead>
+          <tbody id="liTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <h3>國家老年給付（月付）</h3>
     <div class="form-grid">
       <div class="form-group">
         <label>勞保老年年金（月付）</label>
         <input type="number" id="laborInsurance" value="20000" min="0" step="1000">
+        <span id="liAutoFillHint" class="hint" style="display:none; color:var(--success);"></span>
       </div>
       <div class="form-group">
         <label>國民年金（月付）</label>
@@ -793,6 +861,146 @@ function calculateDistribution(accR, distS, basicS, derived) {
   };
 }
 
+// ============================================================
+// 勞保老年年金 Calculator
+// ============================================================
+
+// Convert insurance years+days to pension years (months ceiling, 30 days = 1 month)
+function insYearsToPension(years, days) {
+  var months = Math.ceil(days / 30);
+  if (months >= 12) { years += Math.floor(months / 12); months = months % 12; }
+  return { years: years, months: months, decimal: round2(years + months / 12) };
+}
+
+// 老年一次金 給付月數: first 15 years → 1 month/year, beyond 15 → 2 months/year, max 45
+function lumpSumPayMonths(pensionDecimal) {
+  if (pensionDecimal <= 0) return 0;
+  var full = Math.floor(pensionDecimal);
+  var frac = pensionDecimal - full;
+  var m = 0;
+  if (full <= 15) {
+    m = full;
+  } else {
+    m = 15 + (full - 15) * 2;
+  }
+  // Fractional year: pro-rate at the applicable rate
+  var rateForFrac = full < 15 ? 1 : 2;
+  m += frac * rateForFrac;
+  if (m > 45) m = 45;
+  return round2(m);
+}
+
+// A式: 平均月投保薪資 × 年資 × 0.775% + 3000
+function formulaA(avgSalary, pensionDecimal) {
+  return round2(avgSalary * pensionDecimal * 0.00775 + 3000);
+}
+
+// B式: 平均月投保薪資 × 年資 × 1.55%
+function formulaB(avgSalary, pensionDecimal) {
+  return round2(avgSalary * pensionDecimal * 0.0155);
+}
+
+// Early/late claiming factor. lraAge = {y, m} where 65y0m = 100%
+// 每提早12月減4%, 每延遲12月增4%, proportional for partial years, round to 2 decimals
+function claimFactor(lraAgeY, lraAgeM) {
+  var monthsFrom65 = (lraAgeY - 65) * 12 + lraAgeM;
+  var yearsFromBase = Math.round((monthsFrom65 / 12) * 100) / 100; // round to 2 decimals
+  var factor;
+  if (monthsFrom65 < 0) {
+    factor = 1 - 0.04 * Math.abs(yearsFromBase); // 減額
+  } else {
+    factor = 1 + 0.04 * yearsFromBase; // 展延
+  }
+  return round2(Math.max(0, factor));
+}
+
+// Calculate additional insurance days from calcDate to an LRA date
+function additionalInsDays(calcDate, lraDate) {
+  var diff = lraDate.getTime() - calcDate.getTime();
+  return Math.max(0, Math.round(diff / (1000 * 60 * 60 * 24)));
+}
+
+// Add insurance: current years+days + additional calendar days, return new years+days
+function addInsurance(curYears, curDays, addDays) {
+  var totalDays = curYears * 365 + curDays + addDays;
+  var newYears = Math.floor(totalDays / 365);
+  var newDays = totalDays % 365;
+  return { years: newYears, days: newDays };
+}
+
+// Main: evaluate all 121 LRA options
+function evaluateLaborInsOptions(avgSalary, insYears, insDays, stillInsured, birthDate, calcDate, lifeExpectancy, annualCPI) {
+  var mcpi = annualToMonthlyRate(annualCPI);
+  var lifeEndDate = addYearsToDate(birthDate, lifeExpectancy);
+  var age60Date = addYearsToDate(birthDate, 60);
+  var options = [];
+
+  for (var i = 0; i <= 120; i++) {
+    var lraAgeY = 60 + Math.floor(i / 12);
+    var lraAgeM = i % 12;
+
+    // LRA date
+    var lraDate = addYearsToDate(birthDate, lraAgeY);
+    lraDate.setMonth(lraDate.getMonth() + lraAgeM);
+
+    // Insurance years at LRA
+    var iy, id;
+    if (stillInsured) {
+      var extra = additionalInsDays(calcDate, lraDate);
+      if (extra < 0) extra = 0;
+      var added = addInsurance(insYears, insDays, extra);
+      iy = added.years; id = added.days;
+    } else {
+      iy = insYears; id = insDays;
+    }
+
+    var pension = insYearsToPension(iy, id);
+
+    // A式 and B式
+    var a = formulaA(avgSalary, pension.decimal);
+    var b = formulaB(avgSalary, pension.decimal);
+    var base = Math.max(a, b);
+    var formula = a >= b ? 'A' : 'B';
+
+    // Claiming factor
+    var factor = claimFactor(lraAgeY, lraAgeM);
+    var adjustedMonthly = round2(base * factor);
+
+    // 請領期數: months from LRA to LS
+    var claimMonths = Math.max(0, Math.floor(calcMonthsDiff(lraDate, lifeEndDate)));
+
+    // 名目總額
+    var nominalTotal = round2(adjustedMonthly * claimMonths);
+
+    // PV@60 total: sum of each monthly payment discounted to age 60
+    var monthsLRAFrom60 = Math.round(calcMonthsDiff(age60Date, lraDate));
+    var pvTotal = 0;
+    for (var k = 0; k < claimMonths; k++) {
+      var mFrom60 = monthsLRAFrom60 + k;
+      pvTotal += adjustedMonthly / Math.pow(1 + mcpi, mFrom60);
+    }
+    pvTotal = round2(pvTotal);
+
+    // Lump sum at this LRA
+    var lumpMonths = lumpSumPayMonths(pension.decimal);
+    var lumpSum = round2(avgSalary * lumpMonths);
+    var lumpPV60 = round2(lumpSum / Math.pow(1 + mcpi, monthsLRAFrom60));
+
+    options.push({
+      index: i,
+      lraAgeY: lraAgeY, lraAgeM: lraAgeM,
+      lraDate: lraDate,
+      insYears: iy, insDays: id,
+      pensionYears: pension.years, pensionMonths: pension.months, pensionDecimal: pension.decimal,
+      formulaA: a, formulaB: b, formula: formula, baseMo: base,
+      factor: factor, adjustedMonthly: adjustedMonthly,
+      claimMonths: claimMonths, nominalTotal: nominalTotal, pvTotal: pvTotal,
+      lumpMonths: lumpMonths, lumpSum: lumpSum, lumpPV60: lumpPV60
+    });
+  }
+  return options;
+}
+
 // Pre-distribution phase: simulate 勞退+other assets growing in retirement ETF from age 60 to retirement.
 // Returns monthly data points for chart display (empty if retirement <= 60).
 function computePreDistPhase(distS, basicS, derived) {
@@ -952,6 +1160,134 @@ function onStrategyChange() {
     desc.textContent = '每年年初領出一筆金額，使每年回算到退休日的現值 (PV@60) 儘量相等，壽命結束時遺產歸零。';
     rg.classList.add('hidden');
   }
+}
+
+// Auto-update pension years display when inputs change
+function updatePensionYearsDisplay() {
+  var y = parseInt(document.getElementById('liInsYears').value) || 0;
+  var d = parseInt(document.getElementById('liInsDays').value) || 0;
+  var p = insYearsToPension(y, d);
+  document.getElementById('liPensionYears').textContent = p.years + ' 年 ' + p.months + ' 月 (' + fmtD(p.decimal) + ' 年)';
+}
+
+function runLaborInsCalc() {
+  // Read basic settings
+  var bdVal = document.getElementById('birthDate').value;
+  var cdVal = document.getElementById('calcDate').value;
+  if (!bdVal || !cdVal) { alert('請先填寫出生日期與計算日期'); return; }
+  var bdParts = bdVal.split('-');
+  var cdParts = cdVal.split('-');
+  var birthDate = new Date(parseInt(bdParts[0]), parseInt(bdParts[1]) - 1, parseInt(bdParts[2]));
+  var calcDate = new Date(parseInt(cdParts[0]), parseInt(cdParts[1]) - 1, parseInt(cdParts[2]));
+  var lifeExp = parseInt(document.getElementById('lifeExpectancy').value);
+  var annCPI = parseFloat(document.getElementById('annualCPI').value) / 100;
+
+  var avgSalary = parseFloat(document.getElementById('liAvgSalary').value) || 0;
+  var insYears = parseInt(document.getElementById('liInsYears').value) || 0;
+  var insDays = parseInt(document.getElementById('liInsDays').value) || 0;
+  var stillInsured = document.querySelector('input[name="liStillInsured"]:checked').value === 'yes';
+
+  // Update display
+  updatePensionYearsDisplay();
+
+  // Evaluate all 121 options
+  var options = evaluateLaborInsOptions(avgSalary, insYears, insDays, stillInsured, birthDate, calcDate, lifeExp, annCPI);
+
+  // Find BLRA (best annuity PV@60)
+  var bestIdx = 0;
+  for (var i = 1; i < options.length; i++) {
+    if (options[i].pvTotal > options[bestIdx].pvTotal) bestIdx = i;
+  }
+  var best = options[bestIdx];
+
+  // Show results
+  document.getElementById('liResults').style.display = 'block';
+
+  // Summary box
+  var annuityWins = best.pvTotal >= best.lumpPV60;
+  var recText, recClass;
+  if (annuityWins) {
+    recText = '建議選擇月領年金（PV@60 較高）';
+    recClass = 'green';
+  } else {
+    recText = '建議選擇一次領取（PV@60 較高）';
+    recClass = 'accent';
+  }
+
+  var sumH = '<div class="blra-result-box">';
+  sumH += '<div class="blra-title">最佳勞保退休日期 (BLRA): ' + best.lraAgeY + '歲' + best.lraAgeM + '月 (' + fmtDate(best.lraDate) + ')</div>';
+  sumH += '<div class="blra-grid">';
+  sumH += '<div class="blra-item"><div class="label">年資（at BLRA）</div><div class="value">' + best.pensionYears + '年' + best.pensionMonths + '月</div></div>';
+  sumH += '<div class="blra-item"><div class="label">採用公式</div><div class="value">' + best.formula + '式 $' + fmt(best.baseMo) + '/月</div></div>';
+  sumH += '<div class="blra-item"><div class="label">調整係數</div><div class="value">' + (best.factor * 100).toFixed(2) + '%</div></div>';
+  sumH += '<div class="blra-item"><div class="label">調整後月領</div><div class="value">$' + fmt(best.adjustedMonthly) + '</div></div>';
+  sumH += '<div class="blra-item"><div class="label">請領月數</div><div class="value">' + best.claimMonths + ' 月</div></div>';
+  sumH += '<div class="blra-item green"><div class="label">月付 PV@60 總額</div><div class="value">$' + fmt(best.pvTotal) + '</div></div>';
+  sumH += '<div class="blra-item"><div class="label">一次金</div><div class="value">$' + fmt(best.lumpSum) + '</div></div>';
+  sumH += '<div class="blra-item accent"><div class="label">一次金 PV@60</div><div class="value">$' + fmt(best.lumpPV60) + '</div></div>';
+  sumH += '</div>';
+  sumH += '<div style="margin-top:14px; padding:10px 14px; border-radius:8px; font-weight:700; color:#fff; background:' + (annuityWins ? 'var(--success)' : 'var(--accent)') + ';">';
+  sumH += recText;
+  if (annuityWins) {
+    sumH += ' &nbsp; <button class="btn btn-sm" style="background:#fff; color:var(--success); padding:4px 14px; font-size:0.8rem;" onclick="applyBLRA()">套用至月付欄位</button>';
+  } else {
+    sumH += ' &nbsp; <button class="btn btn-sm" style="background:#fff; color:var(--accent); padding:4px 14px; font-size:0.8rem;" onclick="applyLumpSum()">加入退休資產</button>';
+  }
+  sumH += '</div>';
+  sumH += '</div>';
+  document.getElementById('liSummary').innerHTML = sumH;
+
+  // Store for apply functions
+  window._blraResult = best;
+  window._blraAnnuityWins = annuityWins;
+
+  // Render 121-row table
+  var tbody = document.getElementById('liTableBody');
+  tbody.innerHTML = '';
+  for (var i = 0; i < options.length; i++) {
+    var o = options[i];
+    var tr = document.createElement('tr');
+    if (i === bestIdx) tr.className = 'blra-best';
+    tr.innerHTML =
+      '<td>' + o.lraAgeY + '歲' + o.lraAgeM + '月</td>'
+      + '<td>' + o.pensionDecimal.toFixed(2) + '</td>'
+      + '<td>$' + fmt(o.formulaA) + '</td>'
+      + '<td>$' + fmt(o.formulaB) + '</td>'
+      + '<td>' + (o.factor * 100).toFixed(2) + '%</td>'
+      + '<td>$' + fmt(o.adjustedMonthly) + '</td>'
+      + '<td>' + o.claimMonths + '</td>'
+      + '<td>$' + fmt(o.nominalTotal) + '</td>'
+      + '<td>$' + fmt(o.pvTotal) + '</td>'
+      + '<td>$' + fmt(o.lumpSum) + '</td>'
+      + '<td>$' + fmt(o.lumpPV60) + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  // Scroll BLRA row into view
+  var bestRow = tbody.children[bestIdx];
+  if (bestRow) bestRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function applyBLRA() {
+  if (!window._blraResult) return;
+  var best = window._blraResult;
+  document.getElementById('laborInsurance').value = Math.round(best.adjustedMonthly);
+  var hint = document.getElementById('liAutoFillHint');
+  hint.style.display = 'block';
+  hint.textContent = 'BLRA ' + best.lraAgeY + '歲' + best.lraAgeM + '月 (' + fmtDate(best.lraDate) + ') 開始請領';
+}
+
+function applyLumpSum() {
+  if (!window._blraResult) return;
+  var best = window._blraResult;
+  // Clear labor insurance monthly (not using annuity)
+  document.getElementById('laborInsurance').value = 0;
+  var hint = document.getElementById('liAutoFillHint');
+  hint.style.display = 'block';
+  hint.textContent = '選擇一次領 $' + fmt(best.lumpSum) + '，已加入其他退休資產';
+  // Add lump sum to otherAssets
+  var other = parseFloat(document.getElementById('otherAssets').value) || 0;
+  document.getElementById('otherAssets').value = Math.round(other + best.lumpSum);
 }
 
 function fmt(n) {
@@ -1715,6 +2051,11 @@ function exportPDF() {
   // Add default investments
   addLumpSum();
   addDCA();
+
+  // Auto-update pension years display
+  document.getElementById('liInsYears').addEventListener('input', updatePensionYearsDisplay);
+  document.getElementById('liInsDays').addEventListener('input', updatePensionYearsDisplay);
+  updatePensionYearsDisplay();
 })();
 </script>
 </body>
