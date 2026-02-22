@@ -1409,21 +1409,26 @@ function runLaborInsCalc() {
     var blraLabels = [];
     var blraNominal = [];
     var blraPV60 = [];
-    var bestNomIdx = 0, bestPvIdx = 0;
+    var blraLumpPV60 = [];
+    var bestNomIdx = 0, bestPvIdx = 0, bestLumpIdx = 0;
     for (var ci = 0; ci < options.length; ci++) {
       var o = options[ci];
       blraLabels.push(o.lraAgeY + '歲' + o.lraAgeM + '月');
       blraNominal.push(o.nominalTotal);
       blraPV60.push(o.pvTotal);
+      blraLumpPV60.push(o.lumpPV60);
       if (o.nominalTotal > options[bestNomIdx].nominalTotal) bestNomIdx = ci;
       if (o.pvTotal > options[bestPvIdx].pvTotal) bestPvIdx = ci;
+      if (o.lumpPV60 > options[bestLumpIdx].lumpPV60) bestLumpIdx = ci;
     }
 
     // Point radius arrays: show dot only at max
     var nomRadius = new Array(options.length).fill(0);
     var pvRadius = new Array(options.length).fill(0);
+    var lumpRadius = new Array(options.length).fill(0);
     nomRadius[bestNomIdx] = 7;
     pvRadius[bestPvIdx] = 7;
+    lumpRadius[bestLumpIdx] = 7;
 
     var blraStep = Math.max(1, Math.round(options.length / 20));
 
@@ -1453,6 +1458,18 @@ function runLaborInsCalc() {
             pointRadius: pvRadius,
             pointBackgroundColor: '#7c3aed',
             tension: 0.3
+          },
+          {
+            label: '一次金 PV@60',
+            data: blraLumpPV60,
+            borderColor: '#16a34a',
+            backgroundColor: 'rgba(22,163,74,0.08)',
+            fill: false,
+            borderWidth: 2,
+            borderDash: [6, 3],
+            pointRadius: lumpRadius,
+            pointBackgroundColor: '#16a34a',
+            tension: 0.3
           }
         ]
       },
@@ -1467,6 +1484,7 @@ function runLaborInsCalc() {
                 var suffix = '';
                 if (ctx.datasetIndex === 0 && ctx.dataIndex === bestNomIdx) suffix = ' ★ MAX';
                 if (ctx.datasetIndex === 1 && ctx.dataIndex === bestPvIdx) suffix = ' ★ MAX';
+                if (ctx.datasetIndex === 2 && ctx.dataIndex === bestLumpIdx) suffix = ' ★ MAX';
                 return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) + suffix;
               }
             }
