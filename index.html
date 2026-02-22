@@ -428,6 +428,15 @@ var MONTH_NAMES = ['','1月','2月','3月','4月','5月','6月','7月','8月','9
 
 // Age marker lines for charts (populated during calculation)
 var globalAgeLines = { accum: [], dist: [] };
+// Starting age in months for tooltip age display
+var globalAgeInfo = { accumStartMonths: 0, distStartMonths: 0 };
+
+function ageAtIndex(baseMonths, index) {
+  var total = baseMonths + index + 1;
+  var y = Math.floor(total / 12);
+  var m = Math.floor(total % 12);
+  return y + '歲' + (m > 0 ? ' ' + m + '月' : '');
+}
 
 // Custom Chart.js plugin: draw vertical annotation lines with labels
 var verticalLinePlugin = {
@@ -1023,6 +1032,10 @@ function renderInvestmentChart(key, details, ageLines) {
       plugins: {
         tooltip: {
           callbacks: {
+            title: function(items) {
+              var idx = items[0].dataIndex;
+              return items[0].label + ' — ' + ageAtIndex(globalAgeInfo.accumStartMonths, idx);
+            },
             label: function(ctx) {
               return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
             }
@@ -1074,6 +1087,10 @@ function renderDistributionCharts(monthlyDetails, ageLines) {
 
   var step = Math.max(1, Math.floor(labels.length / 24));
   var tooltipCb = {
+    title: function(items) {
+      var idx = items[0].dataIndex;
+      return items[0].label + ' — ' + ageAtIndex(globalAgeInfo.distStartMonths, idx);
+    },
     label: function(ctx) {
       return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
     }
@@ -1246,11 +1263,14 @@ function runCalculation() {
 
     var distResult = calculateDistribution(accResult, distSettings, basicSettings, derived);
 
-    // --- Compute age marker lines for charts ---
+    // --- Compute age marker lines & tooltip age info for charts ---
     var ip = derived.investmentPeriodMonths;
     var age60Date = addYearsToDate(basicSettings.birthDate, 60);
     var monthsTo60 = calcMonthsDiff(basicSettings.calculationDate, age60Date);
     var retAge = basicSettings.retirementAge;
+    var currentAgeMonths = Math.floor(calcMonthsDiff(basicSettings.birthDate, basicSettings.calculationDate));
+    globalAgeInfo.accumStartMonths = currentAgeMonths;
+    globalAgeInfo.distStartMonths = currentAgeMonths + Math.floor(ip);
 
     // Module A markers (accumulation: months 1..ip, 0-based index = month-1)
     var accAge60Idx = Math.floor(monthsTo60) - 1;
