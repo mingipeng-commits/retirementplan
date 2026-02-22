@@ -401,6 +401,10 @@
           <tbody id="distTableBody"></tbody>
         </table>
       </div>
+      <h3>資產餘額圖</h3>
+      <div class="chart-container" style="max-height:350px;"><canvas id="chart_distBalance" height="300"></canvas></div>
+      <h3>提領金額圖</h3>
+      <div class="chart-container" style="max-height:350px;"><canvas id="chart_distWithdraw" height="300"></canvas></div>
     </div>
   </div>
 </div>
@@ -421,6 +425,46 @@ var ETF_CATALOG = [
 
 var CONFIDENCE_MULT = { high: 1.0, mid: 0.8, low: 0.6 };
 var MONTH_NAMES = ['','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+// Age marker lines for charts (populated during calculation)
+var globalAgeLines = { accum: [], dist: [] };
+
+// Custom Chart.js plugin: draw vertical annotation lines with labels
+var verticalLinePlugin = {
+  id: 'verticalLines',
+  afterDraw: function(chart) {
+    var opts = chart.options.plugins.verticalLines;
+    if (!opts || !opts.lines || opts.lines.length === 0) return;
+    var ctx = chart.ctx;
+    var xScale = chart.scales.x;
+    var yScale = chart.scales.y;
+    opts.lines.forEach(function(line) {
+      if (line.index < 0 || line.index >= chart.data.labels.length) return;
+      var x = xScale.getPixelForValue(line.index);
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash(line.dash || [5, 5]);
+      ctx.strokeStyle = line.color || 'red';
+      ctx.lineWidth = line.width || 2;
+      ctx.moveTo(x, yScale.top);
+      ctx.lineTo(x, yScale.bottom);
+      ctx.stroke();
+      if (line.label) {
+        ctx.font = 'bold 11px sans-serif';
+        var tw = ctx.measureText(line.label).width;
+        var pad = 4;
+        ctx.fillStyle = line.bgColor || line.color || 'red';
+        ctx.fillRect(x - tw / 2 - pad, yScale.top - 20, tw + pad * 2, 18);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(line.label, x, yScale.top - 11);
+      }
+      ctx.restore();
+    });
+  }
+};
+Chart.register(verticalLinePlugin);
 
 function getETFById(id) {
   for (var i = 0; i < ETF_CATALOG.length; i++) {
@@ -903,8 +947,8 @@ function renderDetail(prefix, idx, simResult) {
   container.innerHTML = html;
   container.dataset.rendered = '1';
 
-  // Render chart
-  renderInvestmentChart(prefix + idx, details);
+  // Render chart with age markers
+  renderInvestmentChart(prefix + idx, details, globalAgeLines.accum);
 }
 
 function destroyChart(key) {
@@ -914,7 +958,7 @@ function destroyChart(key) {
   }
 }
 
-function renderInvestmentChart(key, details) {
+function renderInvestmentChart(key, details, ageLines) {
   destroyChart(key);
   var canvas = document.getElementById('chart_' + key);
   if (!canvas) return;
@@ -933,7 +977,6 @@ function renderInvestmentChart(key, details) {
     pv60Data.push(d.pv60);
   }
 
-  // Show every Nth label to avoid crowding
   var step = Math.max(1, Math.floor(labels.length / 24));
 
   chartInstances[key] = new Chart(ctx, {
@@ -985,7 +1028,8 @@ function renderInvestmentChart(key, details) {
             }
           }
         },
-        legend: { position: 'top' }
+        legend: { position: 'top' },
+        verticalLines: { lines: ageLines || [] }
       },
       scales: {
         x: {
@@ -1002,6 +1046,90 @@ function renderInvestmentChart(key, details) {
           }
         }
       }
+    }
+  });
+}
+
+// Render the two Module B distribution charts
+function renderDistributionCharts(monthlyDetails, ageLines) {
+  // --- Chart 1: Asset Balance ---
+  destroyChart('distBalance');
+  var canvas1 = document.getElementById('chart_distBalance');
+  if (!canvas1) return;
+
+  var labels = [];
+  var balNominal = [], balPVNow = [], balPV60 = [];
+  var wdNominal = [], wdPVNow = [], wdPV60 = [];
+
+  for (var i = 0; i < monthlyDetails.length; i++) {
+    var d = monthlyDetails[i];
+    labels.push(d.calendarYear + '/' + d.calendarMonth);
+    balNominal.push(d.endBalance);
+    balPVNow.push(d.endBalancePVNow);
+    balPV60.push(d.endBalancePV60);
+    wdNominal.push(d.monthlyAvailable);
+    wdPVNow.push(d.monthlyAvailPVNow);
+    wdPV60.push(d.monthlyAvailPV60);
+  }
+
+  var step = Math.max(1, Math.floor(labels.length / 24));
+  var tooltipCb = {
+    label: function(ctx) {
+      return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+    }
+  };
+  var xScale = {
+    ticks: {
+      maxTicksLimit: 24,
+      callback: function(val, index) {
+        return index % step === 0 ? this.getLabelForValue(val) : '';
+      }
+    }
+  };
+  var yScale = {
+    ticks: {
+      callback: function(val) { return '$' + val.toLocaleString('zh-TW', { maximumFractionDigits: 0 }); }
+    }
+  };
+
+  chartInstances['distBalance'] = new Chart(canvas1.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '名目餘額', data: balNominal, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 },
+        { label: 'PV@NOW', data: balPVNow, borderColor: '#16a34a', borderWidth: 2, borderDash: [6, 3], pointRadius: 0, fill: false, tension: 0.3 },
+        { label: 'PV@60', data: balPV60, borderColor: '#7c3aed', borderWidth: 2, borderDash: [2, 4], pointRadius: 0, fill: false, tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: { callbacks: tooltipCb }, legend: { position: 'top' }, verticalLines: { lines: ageLines || [] } },
+      scales: { x: xScale, y: yScale }
+    }
+  });
+
+  // --- Chart 2: Monthly Withdrawal ---
+  destroyChart('distWithdraw');
+  var canvas2 = document.getElementById('chart_distWithdraw');
+  if (!canvas2) return;
+
+  chartInstances['distWithdraw'] = new Chart(canvas2.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '月可用金額', data: wdNominal, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 },
+        { label: 'PV@NOW', data: wdPVNow, borderColor: '#16a34a', borderWidth: 2, borderDash: [6, 3], pointRadius: 0, fill: false, tension: 0.3 },
+        { label: 'PV@60', data: wdPV60, borderColor: '#7c3aed', borderWidth: 2, borderDash: [2, 4], pointRadius: 0, fill: false, tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: { callbacks: tooltipCb }, legend: { position: 'top' }, verticalLines: { lines: ageLines || [] } },
+      scales: { x: xScale, y: yScale }
     }
   });
 }
@@ -1118,6 +1246,38 @@ function runCalculation() {
 
     var distResult = calculateDistribution(accResult, distSettings, basicSettings, derived);
 
+    // --- Compute age marker lines for charts ---
+    var ip = derived.investmentPeriodMonths;
+    var age60Date = addYearsToDate(basicSettings.birthDate, 60);
+    var monthsTo60 = calcMonthsDiff(basicSettings.calculationDate, age60Date);
+    var retAge = basicSettings.retirementAge;
+
+    // Module A markers (accumulation: months 1..ip, 0-based index = month-1)
+    var accAge60Idx = Math.floor(monthsTo60) - 1;
+    var accRetIdx = Math.floor(ip) - 1;
+    globalAgeLines.accum = [];
+    if (retAge === 60) {
+      globalAgeLines.accum.push({ index: accRetIdx, color: 'rgba(220,38,38,0.7)', label: '60歲退休', bgColor: 'rgba(220,38,38,0.85)' });
+    } else {
+      if (accAge60Idx >= 0 && accAge60Idx <= accRetIdx) {
+        globalAgeLines.accum.push({ index: accAge60Idx, color: 'rgba(220,38,38,0.7)', label: '60歲', bgColor: 'rgba(220,38,38,0.85)' });
+      }
+      globalAgeLines.accum.push({ index: accRetIdx, color: 'rgba(217,119,6,0.7)', label: retAge + '歲退休', bgColor: 'rgba(217,119,6,0.85)' });
+    }
+
+    // Module B markers (distribution: months 1..dp, 0-based index = month-1)
+    var monthsRetTo60 = calcMonthsDiff(derived.retirementDate, age60Date);
+    var distAge60Idx = Math.floor(monthsRetTo60) - 1;
+    globalAgeLines.dist = [];
+    if (retAge === 60) {
+      globalAgeLines.dist.push({ index: 0, color: 'rgba(220,38,38,0.7)', label: '60歲退休', bgColor: 'rgba(220,38,38,0.85)' });
+    } else {
+      globalAgeLines.dist.push({ index: 0, color: 'rgba(217,119,6,0.7)', label: retAge + '歲退休', bgColor: 'rgba(217,119,6,0.85)' });
+      if (distAge60Idx >= 0 && distAge60Idx < distResult.monthlyDetails.length) {
+        globalAgeLines.dist.push({ index: distAge60Idx, color: 'rgba(220,38,38,0.7)', label: '60歲', bgColor: 'rgba(220,38,38,0.85)' });
+      }
+    }
+
     // --- Render results ---
     document.getElementById('results').style.display = 'block';
 
@@ -1158,6 +1318,9 @@ function runCalculation() {
         + '<td>$' + fmt(d.endBalancePV60) + '</td>';
       tbody.appendChild(tr);
     }
+
+    // Distribution charts
+    renderDistributionCharts(distResult.monthlyDetails, globalAgeLines.dist);
 
     document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
 
