@@ -455,6 +455,8 @@
           <tbody id="liTableBody"></tbody>
         </table>
       </div>
+      <h4 style="margin:16px 0 6px; color:var(--accent);">BLRA 時機分析圖</h4>
+      <div class="chart-container" style="max-height:350px;"><canvas id="chart_blra" height="300"></canvas></div>
     </div>
 
     <h3>國民年金老年年金試算</h3>
@@ -1399,6 +1401,98 @@ function runLaborInsCalc() {
   // Scroll BLRA row into view
   var bestRow = tbody.children[bestIdx];
   if (bestRow) bestRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  // --- BLRA Chart ---
+  destroyChart('blra');
+  var blraCanvas = document.getElementById('chart_blra');
+  if (blraCanvas) {
+    var blraLabels = [];
+    var blraNominal = [];
+    var blraPV60 = [];
+    var bestNomIdx = 0, bestPvIdx = 0;
+    for (var ci = 0; ci < options.length; ci++) {
+      var o = options[ci];
+      blraLabels.push(o.lraAgeY + '歲' + o.lraAgeM + '月');
+      blraNominal.push(o.nominalTotal);
+      blraPV60.push(o.pvTotal);
+      if (o.nominalTotal > options[bestNomIdx].nominalTotal) bestNomIdx = ci;
+      if (o.pvTotal > options[bestPvIdx].pvTotal) bestPvIdx = ci;
+    }
+
+    // Point radius arrays: show dot only at max
+    var nomRadius = new Array(options.length).fill(0);
+    var pvRadius = new Array(options.length).fill(0);
+    nomRadius[bestNomIdx] = 7;
+    pvRadius[bestPvIdx] = 7;
+
+    var blraStep = Math.max(1, Math.round(options.length / 20));
+
+    chartInstances['blra'] = new Chart(blraCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: blraLabels,
+        datasets: [
+          {
+            label: '名目總請領值',
+            data: blraNominal,
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37,99,235,0.08)',
+            fill: false,
+            borderWidth: 2,
+            pointRadius: nomRadius,
+            pointBackgroundColor: '#2563eb',
+            tension: 0.3
+          },
+          {
+            label: 'PV@60 總請領折扣現值',
+            data: blraPV60,
+            borderColor: '#7c3aed',
+            backgroundColor: 'rgba(124,58,237,0.08)',
+            fill: false,
+            borderWidth: 2,
+            pointRadius: pvRadius,
+            pointBackgroundColor: '#7c3aed',
+            tension: 0.3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                var suffix = '';
+                if (ctx.datasetIndex === 0 && ctx.dataIndex === bestNomIdx) suffix = ' ★ MAX';
+                if (ctx.datasetIndex === 1 && ctx.dataIndex === bestPvIdx) suffix = ' ★ MAX';
+                return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) + suffix;
+              }
+            }
+          },
+          legend: { position: 'top' }
+        },
+        scales: {
+          x: {
+            ticks: {
+              autoSkip: false,
+              maxRotation: 45,
+              minRotation: 0,
+              callback: function(val, index) {
+                return index % blraStep === 0 ? this.getLabelForValue(val) : '';
+              }
+            }
+          },
+          y: {
+            ticks: {
+              callback: function(val) { return '$' + val.toLocaleString('zh-TW', { maximumFractionDigits: 0 }); }
+            }
+          }
+        }
+      }
+    });
+  }
 }
 
 function applyBLRA() {
