@@ -309,7 +309,7 @@
       </div>
       <div class="form-group">
         <label>年 CPI (%)</label>
-        <input type="number" id="annualCPI" value="2" min="0" max="10" step="0.1">
+        <input type="text" inputmode="decimal" id="annualCPI" value="2.0">
         <span class="hint">0% ~ 10%，預設 2%</span>
       </div>
     </div>
@@ -356,12 +356,12 @@
     <div class="form-grid">
       <div class="form-group">
         <label>新制勞退一次領出</label>
-        <input type="number" id="laborPension" value="0" min="0" step="10000">
+        <input type="text" inputmode="decimal" id="laborPension" value="0">
         <span class="hint">固定在滿 60 歲時提領</span>
       </div>
       <div class="form-group">
         <label>其他可歸戶資產</label>
-        <input type="number" id="otherAssets" value="0" min="0" step="10000">
+        <input type="text" inputmode="decimal" id="otherAssets" value="0">
       </div>
     </div>
 
@@ -376,14 +376,14 @@
     <div id="withdrawalRateGroup" class="form-grid" style="max-width:300px;">
       <div class="form-group">
         <label>年提領比率 x (%)</label>
-        <input type="number" id="withdrawalRate" value="4" min="1" max="12" step="0.5">
+        <input type="text" inputmode="decimal" id="withdrawalRate" value="4.0">
         <span class="hint">1% ~ 12%</span>
       </div>
     </div>
     <div id="estateReserveGroup" class="form-grid hidden" style="max-width:300px;">
       <div class="form-group">
         <label>預留遺產金額</label>
-        <input type="number" id="estateReserve" value="0" min="0" step="10000">
+        <input type="text" inputmode="decimal" id="estateReserve" value="0">
         <span class="hint">須低於退休當下可分配財產</span>
       </div>
     </div>
@@ -392,7 +392,7 @@
     <div class="form-grid">
       <div class="form-group">
         <label>平均月投保薪資</label>
-        <input type="number" id="liAvgSalary" value="45800" min="0" step="100">
+        <input type="text" inputmode="decimal" id="liAvgSalary" value="45800">
       </div>
       <div class="form-group">
         <label>投保年資（今日）</label>
@@ -448,7 +448,7 @@
     <div class="form-grid">
       <div class="form-group">
         <label>月投保金額</label>
-        <input type="number" id="npMonthlyIns" value="21103" min="0" step="100">
+        <input type="text" inputmode="decimal" id="npMonthlyIns" value="21103">
         <span class="hint">2026 年為 21,103 元</span>
       </div>
       <div class="form-group">
@@ -478,12 +478,12 @@
     <div class="form-grid">
       <div class="form-group">
         <label>勞保老年年金（月付）</label>
-        <input type="number" id="laborInsurance" value="20000" min="0" step="1000">
+        <input type="text" inputmode="decimal" id="laborInsurance" value="20000">
         <span id="liAutoFillHint" class="hint" style="display:none; color:var(--success);"></span>
       </div>
       <div class="form-group">
         <label>國民年金（月付）</label>
-        <input type="number" id="nationalPension" value="5000" min="0" step="100">
+        <input type="text" inputmode="decimal" id="nationalPension" value="5000">
         <span id="npAutoFillHint" class="hint" style="display:none; color:var(--success);"></span>
       </div>
     </div>
@@ -649,6 +649,38 @@ function validateBasicSettings(s) {
 }
 
 function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
+
+// --- Input formatting helpers ---
+function stripCommas(s) { return String(s).replace(/,/g, ''); }
+function parseNum(el) {
+  var v = parseFloat(stripCommas(el.value));
+  return isNaN(v) ? 0 : v;
+}
+function fmtAmtInput(el) {
+  var v = parseFloat(stripCommas(el.value));
+  if (isNaN(v)) return;
+  el.value = v.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+}
+function unfmtInput(el) {
+  el.value = stripCommas(el.value);
+}
+function fmtPctInput(el) {
+  var v = parseFloat(stripCommas(el.value));
+  if (isNaN(v)) return;
+  el.value = v.toFixed(1);
+}
+function attachAmtFmt(el) {
+  if (!el) return;
+  el.addEventListener('focus', function() { unfmtInput(this); });
+  el.addEventListener('blur', function() { fmtAmtInput(this); });
+  fmtAmtInput(el);
+}
+function attachPctFmt(el) {
+  if (!el) return;
+  el.addEventListener('focus', function() { unfmtInput(this); });
+  el.addEventListener('blur', function() { fmtPctInput(this); });
+  fmtPctInput(el);
+}
 
 function calcMonthsDiff(startDate, endDate) {
   var sY = startDate.getFullYear(), sM = startDate.getMonth(), sD = startDate.getDate();
@@ -1160,7 +1192,7 @@ function addLumpSum() {
   div.id = 'ls' + i;
   div.innerHTML =
     '<div class="investment-header">' +
-      '<div class="form-group"><label>投入金額</label><input type="number" id="lsAmt' + i + '" value="1000000" min="0" step="10000"></div>' +
+      '<div class="form-group"><label>投入金額</label><input type="text" inputmode="decimal" id="lsAmt' + i + '" value="1000000"></div>' +
       '<div class="form-group"><label>選擇 ETF</label>' + etfSelectHTML('ls', i) + '</div>' +
       '<div class="form-group"><label>信心度</label>' + confidenceHTML('ls', i) + '</div>' +
       '<button class="btn btn-sm btn-danger" onclick="removeLumpSum(' + i + ')">刪除</button>' +
@@ -1169,6 +1201,7 @@ function addLumpSum() {
     '<div id="lsToggle' + i + '" class="detail-toggle" onclick="toggleDetail(\'ls\',' + i + ')">&#9654; 展開月明細</div>' +
     '<div id="lsDetail' + i + '" class="detail-content"></div>';
   document.getElementById('lumpSumList').appendChild(div);
+  attachAmtFmt(document.getElementById('lsAmt' + i));
 }
 
 function removeLumpSum(i) { var el = document.getElementById('ls' + i); if (el) el.remove(); delete lsSimResults[i]; destroyChart('ls' + i); }
@@ -1180,7 +1213,7 @@ function addDCA() {
   div.id = 'dca' + i;
   div.innerHTML =
     '<div class="investment-header">' +
-      '<div class="form-group"><label>每月金額</label><input type="number" id="dcaAmt' + i + '" value="10000" min="0" step="1000"></div>' +
+      '<div class="form-group"><label>每月金額</label><input type="text" inputmode="decimal" id="dcaAmt' + i + '" value="10000"></div>' +
       '<div class="form-group"><label>選擇 ETF</label>' + etfSelectHTML('dca', i) + '</div>' +
       '<div class="form-group"><label>信心度</label>' + confidenceHTML('dca', i) + '</div>' +
       '<button class="btn btn-sm btn-danger" onclick="removeDCA(' + i + ')">刪除</button>' +
@@ -1189,6 +1222,7 @@ function addDCA() {
     '<div id="dcaToggle' + i + '" class="detail-toggle" onclick="toggleDetail(\'dca\',' + i + ')">&#9654; 展開月明細</div>' +
     '<div id="dcaDetail' + i + '" class="detail-content"></div>';
   document.getElementById('dcaList').appendChild(div);
+  attachAmtFmt(document.getElementById('dcaAmt' + i));
 }
 
 function removeDCA(i) { var el = document.getElementById('dca' + i); if (el) el.remove(); delete dcaSimResults[i]; destroyChart('dca' + i); }
@@ -1266,9 +1300,9 @@ function runLaborInsCalc() {
   var birthDate = new Date(parseInt(bdParts[0]), parseInt(bdParts[1]) - 1, parseInt(bdParts[2]));
   var calcDate = new Date(parseInt(cdParts[0]), parseInt(cdParts[1]) - 1, parseInt(cdParts[2]));
   var lifeExp = parseInt(document.getElementById('lifeExpectancy').value);
-  var annCPI = parseFloat(document.getElementById('annualCPI').value) / 100;
+  var annCPI = parseFloat(stripCommas(document.getElementById('annualCPI').value)) / 100;
 
-  var avgSalary = parseFloat(document.getElementById('liAvgSalary').value) || 0;
+  var avgSalary = parseFloat(stripCommas(document.getElementById('liAvgSalary').value)) || 0;
   var insYears = parseInt(document.getElementById('liInsYears').value) || 0;
   var insDays = parseInt(document.getElementById('liInsDays').value) || 0;
   var stillInsured = document.querySelector('input[name="liStillInsured"]:checked').value === 'yes';
@@ -1357,7 +1391,9 @@ function runLaborInsCalc() {
 function applyBLRA() {
   if (!window._blraResult) return;
   var best = window._blraResult;
-  document.getElementById('laborInsurance').value = Math.round(best.adjustedMonthly);
+  var liEl = document.getElementById('laborInsurance');
+  liEl.value = Math.round(best.adjustedMonthly);
+  fmtAmtInput(liEl);
   // Store BLRA info for distribution calculation and chart markers
   window._blraApplied = {
     date: new Date(best.lraDate.getTime()),
@@ -1374,15 +1410,19 @@ function applyLumpSum() {
   if (!window._blraResult) return;
   var best = window._blraResult;
   // Clear labor insurance monthly (not using annuity)
-  document.getElementById('laborInsurance').value = 0;
+  var liEl2 = document.getElementById('laborInsurance');
+  liEl2.value = 0;
+  fmtAmtInput(liEl2);
   // Clear BLRA since we chose lump sum
   window._blraApplied = null;
   var hint = document.getElementById('liAutoFillHint');
   hint.style.display = 'block';
   hint.textContent = '選擇一次領 $' + fmt(best.lumpSum) + '，已加入其他退休資產';
   // Add lump sum to otherAssets
-  var other = parseFloat(document.getElementById('otherAssets').value) || 0;
-  document.getElementById('otherAssets').value = Math.round(other + best.lumpSum);
+  var oaEl = document.getElementById('otherAssets');
+  var other = parseFloat(stripCommas(oaEl.value)) || 0;
+  oaEl.value = Math.round(other + best.lumpSum);
+  fmtAmtInput(oaEl);
 }
 
 // ============================================================
@@ -1404,7 +1444,7 @@ function updateNpYearsDisplay() {
 }
 
 function runNatPenCalc() {
-  var monthlyIns = parseFloat(document.getElementById('npMonthlyIns').value) || 0;
+  var monthlyIns = parseFloat(stripCommas(document.getElementById('npMonthlyIns').value)) || 0;
   var y = parseInt(document.getElementById('npInsYears').value) || 0;
   var m = parseInt(document.getElementById('npInsMonths').value) || 0;
   var d = parseInt(document.getElementById('npInsDays').value) || 0;
@@ -1413,7 +1453,7 @@ function runNatPenCalc() {
   updateNpYearsDisplay();
 
   // Check if 勞保老年年金 > 0 → must use B式
-  var labInsVal = parseFloat(document.getElementById('laborInsurance').value) || 0;
+  var labInsVal = parseFloat(stripCommas(document.getElementById('laborInsurance').value)) || 0;
   var useOnlyB = labInsVal > 0;
 
   // A式: 月投保金額 × 保險年資 × 0.65% + 4049
@@ -1455,7 +1495,9 @@ function runNatPenCalc() {
 
 function applyNatPen() {
   if (!window._npResult) return;
-  document.getElementById('nationalPension').value = Math.round(window._npResult.monthly);
+  var npEl = document.getElementById('nationalPension');
+  npEl.value = Math.round(window._npResult.monthly);
+  fmtAmtInput(npEl);
   var hint = document.getElementById('npAutoFillHint');
   hint.style.display = 'block';
   hint.textContent = window._npResult.formulaName + '，65歲0月開始請領';
@@ -1812,7 +1854,7 @@ function runCalculation() {
       calculationDate: calcDate,
       retirementAge: parseInt(document.getElementById('retirementAge').value),
       lifeExpectancy: parseInt(document.getElementById('lifeExpectancy').value),
-      annualCPI: parseFloat(document.getElementById('annualCPI').value) / 100
+      annualCPI: parseFloat(stripCommas(document.getElementById('annualCPI').value)) / 100
     };
 
     var derived = calculateDerived(basicSettings);
@@ -1827,7 +1869,7 @@ function runCalculation() {
       var amtEl = document.getElementById('lsAmt' + idx);
       if (!amtEl) continue;
       var inv = {
-        amount: parseFloat(amtEl.value),
+        amount: parseFloat(stripCommas(amtEl.value)),
         etf: readInvETF('ls', idx),
         confidence: readConfidence('ls', idx)
       };
@@ -1853,7 +1895,7 @@ function runCalculation() {
       var amtEl = document.getElementById('dcaAmt' + idx);
       if (!amtEl) continue;
       var inv = {
-        monthlyAmount: parseFloat(amtEl.value),
+        monthlyAmount: parseFloat(stripCommas(amtEl.value)),
         etf: readInvETF('dca', idx),
         confidence: readConfidence('dca', idx)
       };
@@ -1878,7 +1920,7 @@ function runCalculation() {
 
     // Read Module B
     var strategy = document.querySelector('input[name="strategy"]:checked').value;
-    var wRate = parseFloat(document.getElementById('withdrawalRate').value) / 100;
+    var wRate = parseFloat(stripCommas(document.getElementById('withdrawalRate').value)) / 100;
     var retETFRaw = getETFById(document.getElementById('retETFSelect').value);
     var retConfRadios = document.getElementsByName('retConf');
     var retConf = 'high';
@@ -1887,17 +1929,17 @@ function runCalculation() {
     }
     var retETF = applyConfidence(retETFRaw, retConf);
 
-    var estateReserve = parseFloat(document.getElementById('estateReserve').value) || 0;
+    var estateReserve = parseFloat(stripCommas(document.getElementById('estateReserve').value)) || 0;
 
     var distSettings = {
       strategy: strategy,
       withdrawalRate: wRate,
       estateReserve: estateReserve,
       retirementETF: retETF,
-      laborPensionLumpSum: parseFloat(document.getElementById('laborPension').value) || 0,
-      otherAssets: parseFloat(document.getElementById('otherAssets').value) || 0,
-      laborInsuranceMonthly: parseFloat(document.getElementById('laborInsurance').value) || 0,
-      nationalPensionMonthly: parseFloat(document.getElementById('nationalPension').value) || 0
+      laborPensionLumpSum: parseFloat(stripCommas(document.getElementById('laborPension').value)) || 0,
+      otherAssets: parseFloat(stripCommas(document.getElementById('otherAssets').value)) || 0,
+      laborInsuranceMonthly: parseFloat(stripCommas(document.getElementById('laborInsurance').value)) || 0,
+      nationalPensionMonthly: parseFloat(stripCommas(document.getElementById('nationalPension').value)) || 0
     };
 
     // Compute labInsStartMonth from BLRA (if applied)
@@ -2356,6 +2398,12 @@ function exportPDF() {
   document.getElementById('npInsMonths').addEventListener('input', updateNpYearsDisplay);
   document.getElementById('npInsDays').addEventListener('input', updateNpYearsDisplay);
   updateNpYearsDisplay();
+
+  // Attach input formatting (amounts with commas, percentages with 1 decimal)
+  var amtIds = ['laborPension', 'otherAssets', 'estateReserve', 'liAvgSalary', 'npMonthlyIns', 'laborInsurance', 'nationalPension'];
+  for (var ai = 0; ai < amtIds.length; ai++) { attachAmtFmt(document.getElementById(amtIds[ai])); }
+  var pctIds = ['annualCPI', 'withdrawalRate'];
+  for (var pi = 0; pi < pctIds.length; pi++) { attachPctFmt(document.getElementById(pctIds[pi])); }
 })();
 </script>
 </body>
