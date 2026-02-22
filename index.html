@@ -544,7 +544,7 @@ function simulateLumpSumDetailed(inv, settings, derived) {
       cagrGrowth: round2(cg), dividend: round2(r.dividend),
       endBalance: round2(p), nominal: round2(p),
       pvNow: round2(p / Math.pow(1 + mcpi, m)),
-      pv60: round2(p / Math.pow(1 + mcpi, ip))
+      pv60: round2(p * Math.pow(1 + mcpi, ip - m))
     });
     cm++; if (cm > 12) { cm = 1; cy++; }
   }
@@ -576,7 +576,7 @@ function simulateDCADetailed(inv, settings, derived) {
       cagrGrowth: round2(cg), dividend: round2(r.dividend),
       endBalance: round2(p), nominal: round2(p),
       pvNow: round2(p / Math.pow(1 + mcpi, m)),
-      pv60: round2(p / Math.pow(1 + mcpi, ip))
+      pv60: round2(p * Math.pow(1 + mcpi, ip - m))
     });
     cm++; if (cm > 12) { cm = 1; cy++; }
   }
