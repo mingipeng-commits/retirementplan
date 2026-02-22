@@ -158,6 +158,7 @@
     cursor: pointer;
   }
   .confidence-group input[type="radio"] { accent-color: var(--primary); }
+  .confidence-hint { font-size: 0.72rem; color: var(--text-light); margin-top: 2px; }
 
   /* Expandable detail section */
   .detail-toggle {
@@ -346,6 +347,7 @@
           <label><input type="radio" name="retConf" value="low">低</label>
           <label><input type="radio" name="retConf" value="very-low">極低</label>
         </div>
+        <div class="confidence-hint">高 100% / 中 80% / 低 60% / 極低 50%</div>
       </div>
       <div id="retETFInfo" class="etf-info show" style="grid-column: 1/-1;"></div>
     </div>
@@ -1147,7 +1149,8 @@ function confidenceHTML(prefix, idx) {
     '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="mid">中</label>' +
     '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="low">低</label>' +
     '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="very-low">極低</label>' +
-    '</div>';
+    '</div>' +
+    '<div class="confidence-hint">高 100% / 中 80% / 低 60% / 極低 50%</div>';
 }
 
 function addLumpSum() {
@@ -1551,7 +1554,8 @@ function renderInvestmentChart(key, details, ageLines) {
     pv60Data.push(d.pv60);
   }
 
-  var step = Math.max(1, Math.floor(labels.length / 24));
+  var step = Math.max(1, Math.round(labels.length / 40));
+  if (step > 6) step = 12;
 
   chartInstances[key] = new Chart(ctx, {
     type: 'line',
@@ -1612,7 +1616,9 @@ function renderInvestmentChart(key, details, ageLines) {
       scales: {
         x: {
           ticks: {
-            maxTicksLimit: 24,
+            autoSkip: false,
+            maxRotation: 45,
+            minRotation: 0,
             callback: function(val, index) {
               return index % step === 0 ? this.getLabelForValue(val) : '';
             }
@@ -1650,7 +1656,8 @@ function renderDistributionCharts(monthlyDetails, ageLines) {
     wdNatPen.push(d.monthlyNatPen);
   }
 
-  var step = Math.max(1, Math.floor(labels.length / 24));
+  var step = Math.max(1, Math.round(labels.length / 40));
+  if (step > 6) step = 12;
   var tooltipCb = {
     title: function(items) {
       var idx = items[0].dataIndex;
@@ -1662,7 +1669,9 @@ function renderDistributionCharts(monthlyDetails, ageLines) {
   };
   var xScale = {
     ticks: {
-      maxTicksLimit: 24,
+      autoSkip: false,
+      maxRotation: 45,
+      minRotation: 0,
       callback: function(val, index) {
         return index % step === 0 ? this.getLabelForValue(val) : '';
       }
@@ -2056,6 +2065,16 @@ function runCalculation() {
       '<div class="summary-item"><div class="label">勞保老年年金（月）</div><div class="value">$' + fmt(distSettings.laborInsuranceMonthly) + '</div></div>'
       + '<div class="summary-item"><div class="label">國民年金（月）</div><div class="value">$' + fmt(distSettings.nationalPensionMonthly) + '</div></div>'
       + '<div class="summary-item green"><div class="label">壽命結束時遺產</div><div class="value">$' + fmt(distResult.estate) + '</div></div>';
+    // Monthly available amount (first month of distribution)
+    var firstMonth = distResult.monthlyDetails[0];
+    if (firstMonth) {
+      distSumHtml += '<div class="summary-block"><div class="summary-block-title">退休後每月可使用金額（第一個月）</div>'
+        + '<div class="summary-sub-list">'
+        + '<div class="summary-sub-item"><div class="sub-label">名目金額</div><div class="sub-value">$' + fmt(firstMonth.monthlyAvailable) + '</div></div>'
+        + '<div class="summary-sub-item"><div class="sub-label">PV@60</div><div class="sub-value">$' + fmt(firstMonth.monthlyAvailPV60) + '</div></div>'
+        + '<div class="summary-sub-item"><div class="sub-label">PV@NOW</div><div class="sub-value">$' + fmt(firstMonth.monthlyAvailPVNow) + '</div></div>'
+        + '</div></div>';
+    }
     document.getElementById('distSummary').innerHTML = distSumHtml;
 
     // Distribution table (monthly)
@@ -2182,6 +2201,15 @@ function exportPDF() {
     + kv('國民年金（月）', '$' + fmt(ds.nationalPensionMonthly))
     + kv('壽命結束時遺產', '$' + fmt(dr.estate))
   );
+  // Monthly available (first month)
+  var fm = dr.monthlyDetails[0];
+  if (fm) {
+    h += kvTbl(
+      kv('退休後每月可使用 — 名目金額', '$' + fmt(fm.monthlyAvailable))
+      + kv('退休後每月可使用 — PV@60', '$' + fmt(fm.monthlyAvailPV60))
+      + kv('退休後每月可使用 — PV@NOW', '$' + fmt(fm.monthlyAvailPVNow))
+    );
+  }
 
   // Charts
   if (chartBalSrc) {
@@ -2199,11 +2227,11 @@ function exportPDF() {
 
   // Annual summary table
   h += sect('年度分配摘要');
-  h += '<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
   h += '<thead><tr>';
-  var ths = ['年', '年提領', 'PV@NOW', 'PV@60', '年末餘額', '餘額PV@NOW', '餘額PV@60'];
+  var ths = ['年度', '年提領（名目）', '提領PV@NOW', '提領PV@60', '年末餘額（名目）', '餘額PV@NOW', '餘額PV@60'];
   for (var ti = 0; ti < ths.length; ti++) {
-    h += '<th style="padding:4px 3px;text-align:right;border-bottom:2px solid #cbd5e1;background:#f1f5f9;color:#64748b;">' + ths[ti] + '</th>';
+    h += '<th style="padding:6px 4px;text-align:right;border-bottom:2px solid #94a3b8;background:#e2e8f0;color:#1e293b;font-weight:700;font-size:11px;">' + ths[ti] + '</th>';
   }
   h += '</tr></thead><tbody>';
 
