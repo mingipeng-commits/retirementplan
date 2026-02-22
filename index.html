@@ -264,7 +264,7 @@
     <div class="form-grid">
       <div class="form-group">
         <label>出生年月日 (BD)</label>
-        <input type="date" id="birthDate" value="1990-01-15">
+        <input type="date" id="birthDate" value="1969-03-14">
       </div>
       <div class="form-group">
         <label>使用計算機的日期 (TD)</label>
@@ -410,6 +410,8 @@
       <div class="chart-container" style="max-height:350px;"><canvas id="chart_distBalance" height="300"></canvas></div>
       <h3>每月收入組成圖</h3>
       <div class="chart-container" style="max-height:350px;"><canvas id="chart_distWithdraw" height="300"></canvas></div>
+      <h3>提領金額圖</h3>
+      <div class="chart-container" style="max-height:350px;"><canvas id="chart_distTotal" height="300"></canvas></div>
     </div>
     <div class="btn-center">
       <button id="pdfBtn" class="btn btn-export" onclick="exportPDF()" style="font-size:1rem; padding: 12px 36px;">
@@ -1233,6 +1235,37 @@ function renderDistributionCharts(monthlyDetails, ageLines) {
       }
     }
   });
+
+  // --- Chart 3: Total Monthly Withdraw (nominal + PV@NOW + PV@60) ---
+  destroyChart('distTotal');
+  var canvas3 = document.getElementById('chart_distTotal');
+  if (!canvas3) return;
+
+  var totalNominal = [], totalPVNow = [], totalPV60 = [];
+  for (var i = 0; i < monthlyDetails.length; i++) {
+    var d = monthlyDetails[i];
+    totalNominal.push(d.monthlyAvailable);
+    totalPVNow.push(d.monthlyAvailPVNow);
+    totalPV60.push(d.monthlyAvailPV60);
+  }
+
+  chartInstances['distTotal'] = new Chart(canvas3.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '月可用金額', data: totalNominal, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 },
+        { label: 'PV@NOW', data: totalPVNow, borderColor: '#16a34a', borderWidth: 2, borderDash: [6, 3], pointRadius: 0, fill: false, tension: 0.3 },
+        { label: 'PV@60', data: totalPV60, borderColor: '#7c3aed', borderWidth: 2, borderDash: [2, 4], pointRadius: 0, fill: false, tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: { callbacks: tooltipCb }, legend: { position: 'top' }, verticalLines: { lines: ageLines || [] } },
+      scales: { x: xScale, y: yScale }
+    }
+  });
 }
 
 // ============================================================
@@ -1488,8 +1521,10 @@ function exportPDF() {
   // Capture chart images
   var chartBalEl = document.getElementById('chart_distBalance');
   var chartWdEl = document.getElementById('chart_distWithdraw');
+  var chartTotalEl = document.getElementById('chart_distTotal');
   var chartBalSrc = chartBalEl ? chartBalEl.toDataURL('image/png') : '';
   var chartWdSrc = chartWdEl ? chartWdEl.toDataURL('image/png') : '';
+  var chartTotalSrc = chartTotalEl ? chartTotalEl.toDataURL('image/png') : '';
 
   // Helper functions
   function sect(t) { return '<h2 style="font-size:15px;color:#1d4ed8;border-bottom:2px solid #2563eb;padding-bottom:4px;margin:24px 0 10px;">' + t + '</h2>'; }
@@ -1554,6 +1589,10 @@ function exportPDF() {
   if (chartWdSrc) {
     h += sect('每月收入組成圖');
     h += '<img src="' + chartWdSrc + '" style="width:100%;margin:4px 0 8px;" />';
+  }
+  if (chartTotalSrc) {
+    h += sect('提領金額圖');
+    h += '<img src="' + chartTotalSrc + '" style="width:100%;margin:4px 0 8px;" />';
   }
 
   // Annual summary table
