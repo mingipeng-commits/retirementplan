@@ -787,6 +787,47 @@ function calculateDistribution(accR, distS, basicS, derived) {
   };
 }
 
+// Pre-distribution phase: simulate 勞退+other assets growing in retirement ETF from age 60 to retirement.
+// Returns monthly data points for chart display (empty if retirement <= 60).
+function computePreDistPhase(distS, basicS, derived) {
+  var age60Date = addYearsToDate(basicS.birthDate, 60);
+  var monthsToRet = Math.floor(calcMonthsDiff(age60Date, derived.retirementDate));
+  if (monthsToRet <= 0) return [];
+
+  var etf = distS.retirementETF;
+  var mcpi = derived.monthlyCPI;
+  var ip = derived.investmentPeriodMonths;
+  var initial = calculateBuyAmount(distS.laborPensionLumpSum + distS.otherAssets);
+  var a = initial;
+  var cm = age60Date.getMonth() + 1;
+  var cy = age60Date.getFullYear();
+  var details = [];
+  // months from age60 to calcDate (negative if already past 60)
+  var monthsNowTo60 = Math.floor(calcMonthsDiff(basicS.calculationDate, age60Date));
+
+  for (var m = 1; m <= monthsToRet; m++) {
+    var begin = a;
+    var result = simulateMonthGrowth(a, etf, cm);
+    a = result.newPrincipal;
+    var mfN = monthsNowTo60 + m; // months from now
+    var mfR60 = m; // months from age 60
+
+    details.push({
+      calendarYear: cy, calendarMonth: cm,
+      endBalance: round2(a),
+      endBalancePVNow: round2(a / Math.pow(1 + mcpi, mfN)),
+      endBalancePV60: round2(a / Math.pow(1 + mcpi, mfR60)),
+      monthlyAvailable: 0,
+      monthlyAvailPVNow: 0,
+      monthlyAvailPV60: 0,
+      isPreDist: true
+    });
+    cm++;
+    if (cm > 12) { cm = 1; cy++; }
+  }
+  return details;
+}
+
 // ============================================================
 // UI Logic
 // ============================================================
@@ -1296,17 +1337,38 @@ function runCalculation() {
       globalAgeLines.accum.push({ index: accRetIdx, color: 'rgba(217,119,6,0.7)', label: retAge + '歲退休', bgColor: 'rgba(217,119,6,0.85)' });
     }
 
-    // Module B markers (distribution: months 1..dp, 0-based index = month-1)
-    var monthsRetTo60 = calcMonthsDiff(derived.retirementDate, age60Date);
-    var distAge60Idx = Math.floor(monthsRetTo60) - 1;
+    // Module B: build combined chart data starting from age 60
+    var preDistPhase = computePreDistPhase(distSettings, basicSettings, derived);
+    var preLen = preDistPhase.length;
+    var chartDistData;
+    if (preLen > 0) {
+      // Retirement > 60: prepend pre-dist phase
+      chartDistData = preDistPhase.concat(distResult.monthlyDetails);
+    } else if (retAge < 60) {
+      // Retirement < 60: trim distribution to start from age 60
+      var monthsRetTo60 = Math.floor(calcMonthsDiff(derived.retirementDate, age60Date));
+      if (monthsRetTo60 > 0 && monthsRetTo60 < distResult.monthlyDetails.length) {
+        chartDistData = distResult.monthlyDetails.slice(monthsRetTo60);
+      } else {
+        chartDistData = distResult.monthlyDetails;
+      }
+    } else {
+      chartDistData = distResult.monthlyDetails;
+    }
+
+    // Module B chart tooltip: chart always starts at age 60
+    globalAgeInfo.distStartMonths = 60 * 12;
+
+    // Module B markers on combined chart
     globalAgeLines.dist = [];
     if (retAge === 60) {
       globalAgeLines.dist.push({ index: 0, color: 'rgba(220,38,38,0.7)', label: '60歲退休', bgColor: 'rgba(220,38,38,0.85)' });
+    } else if (retAge > 60) {
+      globalAgeLines.dist.push({ index: 0, color: 'rgba(220,38,38,0.7)', label: '60歲', bgColor: 'rgba(220,38,38,0.85)' });
+      globalAgeLines.dist.push({ index: preLen, color: 'rgba(217,119,6,0.7)', label: retAge + '歲退休', bgColor: 'rgba(217,119,6,0.85)' });
     } else {
-      globalAgeLines.dist.push({ index: 0, color: 'rgba(217,119,6,0.7)', label: retAge + '歲退休', bgColor: 'rgba(217,119,6,0.85)' });
-      if (distAge60Idx >= 0 && distAge60Idx < distResult.monthlyDetails.length) {
-        globalAgeLines.dist.push({ index: distAge60Idx, color: 'rgba(220,38,38,0.7)', label: '60歲', bgColor: 'rgba(220,38,38,0.85)' });
-      }
+      // Retirement < 60: chart starts at 60, retirement already happened
+      globalAgeLines.dist.push({ index: 0, color: 'rgba(220,38,38,0.7)', label: '60歲', bgColor: 'rgba(220,38,38,0.85)' });
     }
 
     // --- Render results ---
@@ -1327,9 +1389,17 @@ function runCalculation() {
       + '<div class="summary-item"><div class="label">定期定額累積</div><div class="value">$' + fmt(accResult.dcaTotal) + '</div></div>'
       + '<div class="summary-item accent"><div class="label">退休當下可分配財產</div><div class="value">$' + fmt(accResult.totalAtRetirement) + '</div></div>';
 
-    // Distribution summary
+    // Distribution summary (breakdown)
+    var preETF = accResult.totalAtRetirement + distSettings.laborPensionLumpSum + distSettings.otherAssets;
+    var buyFee = preETF * BUY_FEE_RATE;
     document.getElementById('distSummary').innerHTML =
-      '<div class="summary-item accent"><div class="label">退休總資產（含勞退+其他，入ETF後）</div><div class="value">$' + fmt(distResult.totalRetirementAssets) + '</div></div>'
+      '<div class="summary-item"><div class="label">ETF 投資組合（Module A）</div><div class="value">$' + fmt(accResult.totalAtRetirement) + '</div></div>'
+      + '<div class="summary-item"><div class="label">勞退新制一次領出</div><div class="value">$' + fmt(distSettings.laborPensionLumpSum) + '</div></div>'
+      + '<div class="summary-item"><div class="label">其他退休資產</div><div class="value">$' + fmt(distSettings.otherAssets) + '</div></div>'
+      + '<div class="summary-item"><div class="label">買入手續費</div><div class="value">-$' + fmt(buyFee) + '</div></div>'
+      + '<div class="summary-item accent"><div class="label">退休總資產（入ETF後）</div><div class="value">$' + fmt(distResult.totalRetirementAssets) + '</div></div>'
+      + '<div class="summary-item"><div class="label">勞保老年年金（月）</div><div class="value">$' + fmt(distSettings.laborInsuranceMonthly) + '</div></div>'
+      + '<div class="summary-item"><div class="label">國民年金（月）</div><div class="value">$' + fmt(distSettings.nationalPensionMonthly) + '</div></div>'
       + '<div class="summary-item green"><div class="label">壽命結束時遺產</div><div class="value">$' + fmt(distResult.estate) + '</div></div>';
 
     // Distribution table (monthly)
@@ -1350,8 +1420,8 @@ function runCalculation() {
       tbody.appendChild(tr);
     }
 
-    // Distribution charts
-    renderDistributionCharts(distResult.monthlyDetails, globalAgeLines.dist);
+    // Distribution charts (combined: preDist + dist, always from age 60)
+    renderDistributionCharts(chartDistData, globalAgeLines.dist);
 
     // Store results for PDF export
     lastCalcResult = {
