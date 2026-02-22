@@ -382,20 +382,20 @@
     <div class="card">
       <h2>Module B — 分配結果</h2>
       <div class="summary-grid" id="distSummary"></div>
-      <h3>各年提領明細</h3>
+      <h3>每月提領明細</h3>
       <div class="table-wrap">
         <table id="distTable">
           <thead>
             <tr>
-              <th>年</th>
-              <th>年初提領</th>
-              <th>PV@退休</th>
-              <th>PV@今日</th>
-              <th>ETF 增長</th>
-              <th>剩餘資產</th>
-              <th>月可用</th>
-              <th>月PV@今日</th>
-              <th>月PV@60</th>
+              <th>月</th>
+              <th>年/月</th>
+              <th>期初餘額</th>
+              <th>提領</th>
+              <th>CAGR增值</th>
+              <th>配息</th>
+              <th>期末餘額</th>
+              <th>PV@NOW</th>
+              <th>PV@60</th>
             </tr>
           </thead>
           <tbody id="distTableBody"></tbody>
@@ -597,107 +597,131 @@ function calculateTotalRetirementAssets(accR, distS) {
   return calculateBuyAmount(t);
 }
 
-function simulateYear(assets, etf, retMonth) {
-  var cm = retMonth, start = assets;
-  for (var m = 0; m < 12; m++) {
-    var r = simulateMonthGrowth(assets, etf, cm);
-    assets = r.newPrincipal;
-    cm++; if (cm > 12) cm = 1;
+// Generic monthly distribution simulation.
+// getGrossWithdrawal(assets, yearIdx) returns the gross amount to sell at the start of that year.
+function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns, natPen, getGrossWithdrawal) {
+  var details = [];
+  var a = total;
+  var cm = retDate.getMonth() + 1;
+  var cy = retDate.getFullYear();
+  var currentYearNetW = 0;
+
+  for (var m = 1; m <= totalMonths; m++) {
+    var begin = a;
+    var monthInYear = ((m - 1) % 12) + 1;
+    var yearIdx = Math.floor((m - 1) / 12) + 1;
+
+    // Withdrawal at the first month of each distribution year
+    var netW = 0;
+    if (monthInYear === 1) {
+      var grossW = getGrossWithdrawal(a, yearIdx);
+      grossW = Math.min(grossW, a);
+      netW = calculateSellProceeds(grossW);
+      a -= grossW;
+      currentYearNetW = netW;
+    }
+
+    // Monthly ETF growth
+    var beforeGrowth = a;
+    var result = simulateMonthGrowth(a, etf, cm);
+    var cagrGrowth = beforeGrowth * annualToMonthlyRate(etf.annualCAGR);
+    a = result.newPrincipal;
+
+    // PV calculations: mfR = months from retirement, mfN = months from now
+    var mfR = m;
+    var mfN = ip + m;
+    var monthlyAvail = currentYearNetW / 12 + labIns + natPen;
+
+    details.push({
+      month: m, calendarYear: cy, calendarMonth: cm, year: yearIdx,
+      beginBalance: round2(begin),
+      withdrawal: round2(netW),
+      cagrGrowth: round2(cagrGrowth),
+      dividend: round2(result.dividend),
+      endBalance: round2(a),
+      endBalancePVNow: round2(a / Math.pow(1 + mcpi, mfN)),
+      endBalancePV60: round2(a / Math.pow(1 + mcpi, mfR)),
+      monthlyAvailable: round2(monthlyAvail),
+      monthlyAvailPVNow: round2(monthlyAvail / Math.pow(1 + mcpi, mfN)),
+      monthlyAvailPV60: round2(monthlyAvail / Math.pow(1 + mcpi, mfR))
+    });
+
+    cm++;
+    if (cm > 12) { cm = 1; cy++; }
   }
-  return { assets: assets, growth: assets - start };
+  return details;
 }
 
-function buildRow(year, netW, assets, etfG, mcpi, ip, labIns, natPen) {
-  var monthW = netW / 12;
-  var monthAvail = monthW + labIns + natPen;
-  var mfR = (year - 1) * 12;
-  var mfN = ip + mfR;
-  return {
-    year: year,
-    withdrawalAmount: round2(netW),
-    pvAtRetirement: round2(netW / Math.pow(1 + mcpi, mfR)),
-    pvAtNow: round2(netW / Math.pow(1 + mcpi, mfN)),
-    remainingAssets: round2(assets),
-    etfGrowth: round2(etfG),
-    monthlyAvailable: round2(monthAvail),
-    monthlyAvailablePVNow: round2(monthAvail / Math.pow(1 + mcpi, mfN)),
-    monthlyAvailablePV60: round2(monthAvail / Math.pow(1 + mcpi, mfR))
-  };
-}
-
-function simFixedRate(total, rate, etf, retDate, years, mcpi, ip, labIns, natPen) {
-  var res = [], a = total, rm = retDate.getMonth() + 1;
-  for (var y = 1; y <= years; y++) {
-    var w = a * rate;
-    var nw = calculateSellProceeds(w);
-    a -= w;
-    var yr = simulateYear(a, etf, rm);
-    a = yr.assets;
-    res.push(buildRow(y, nw, a, yr.growth, mcpi, ip, labIns, natPen));
-  }
-  return res;
-}
-
-function simIncreasingRate(total, baseRate, etf, retDate, years, mcpi, ip, labIns, natPen) {
-  var res = [], a = total, rm = retDate.getMonth() + 1;
-  for (var y = 1; y <= years; y++) {
-    var di = Math.floor((y - 1) / 10);
-    var cr = baseRate + di * 0.01;
-    var w = a * cr;
-    var nw = calculateSellProceeds(w);
-    a -= w;
-    var yr = simulateYear(a, etf, rm);
-    a = yr.assets;
-    res.push(buildRow(y, nw, a, yr.growth, mcpi, ip, labIns, natPen));
-  }
-  return res;
-}
-
-function simConstantPV(total, etf, retDate, years, mcpi, annCPI, ip, labIns, natPen) {
+// Fast annual-level simulation for constant-PV binary search
+function findConstantPVAmount(total, etf, retDate, years, annCPI) {
   var low = 0, high = total, tol = 1;
-  function simWithPV(pv60) {
-    var res = [], a = total, rm = retDate.getMonth() + 1, funded = true;
+  var rm = retDate.getMonth() + 1;
+  function simRemaining(pv60) {
+    var a = total, funded = true;
     for (var y = 1; y <= years; y++) {
       var nom = pv60 * Math.pow(1 + annCPI, y - 1);
       var gross = nom / (1 - SELL_FEE_RATE);
       var actual = Math.min(gross, a);
       if (actual < gross - 0.01) funded = false;
-      var nw = calculateSellProceeds(actual);
       a -= actual;
       if (a < 0) a = 0;
-      var yr = simulateYear(a, etf, rm);
-      a = yr.assets;
-      res.push(buildRow(y, nw, a, yr.growth, mcpi, ip, labIns, natPen));
+      var cmY = rm;
+      for (var mm = 0; mm < 12; mm++) {
+        var r = simulateMonthGrowth(a, etf, cmY);
+        a = r.newPrincipal;
+        cmY++; if (cmY > 12) cmY = 1;
+      }
     }
-    return { remaining: a, fullyFunded: funded, withdrawals: res };
+    return { remaining: a, fullyFunded: funded };
   }
   for (var iter = 0; iter < 100; iter++) {
     var mid = (low + high) / 2;
-    var r = simWithPV(mid);
+    var r = simRemaining(mid);
     if (r.fullyFunded && Math.abs(r.remaining) < tol) break;
     if (!r.fullyFunded || r.remaining < 0) high = mid;
     else low = mid;
   }
-  return simWithPV((low + high) / 2).withdrawals;
+  return (low + high) / 2;
 }
 
 function calculateDistribution(accR, distS, basicS, derived) {
   var total = calculateTotalRetirementAssets(accR, distS);
   var years = Math.ceil(derived.distributionPeriodMonths / 12);
+  var totalMonths = years * 12;
   var etf = distS.retirementETF;
-  var aw;
+  var mcpi = derived.monthlyCPI;
+  var ip = derived.investmentPeriodMonths;
+  var labIns = distS.laborInsuranceMonthly;
+  var natPen = distS.nationalPensionMonthly;
+
+  var getGrossW;
   if (distS.strategy === 'fixed-rate') {
-    aw = simFixedRate(total, distS.withdrawalRate, etf, derived.retirementDate, years,
-      derived.monthlyCPI, derived.investmentPeriodMonths, distS.laborInsuranceMonthly, distS.nationalPensionMonthly);
+    var rate = distS.withdrawalRate;
+    getGrossW = function(assets) { return assets * rate; };
   } else if (distS.strategy === 'increasing-rate') {
-    aw = simIncreasingRate(total, distS.withdrawalRate, etf, derived.retirementDate, years,
-      derived.monthlyCPI, derived.investmentPeriodMonths, distS.laborInsuranceMonthly, distS.nationalPensionMonthly);
+    var baseRate = distS.withdrawalRate;
+    getGrossW = function(assets, yearIdx) {
+      var di = Math.floor((yearIdx - 1) / 10);
+      return assets * (baseRate + di * 0.01);
+    };
   } else {
-    aw = simConstantPV(total, etf, derived.retirementDate, years,
-      derived.monthlyCPI, basicS.annualCPI, derived.investmentPeriodMonths, distS.laborInsuranceMonthly, distS.nationalPensionMonthly);
+    var pv60Amt = findConstantPVAmount(total, etf, derived.retirementDate, years, basicS.annualCPI);
+    var annCPI = basicS.annualCPI;
+    getGrossW = function(assets, yearIdx) {
+      var nom = pv60Amt * Math.pow(1 + annCPI, yearIdx - 1);
+      return nom / (1 - SELL_FEE_RATE);
+    };
   }
-  var last = aw[aw.length - 1];
-  return { totalRetirementAssets: round2(total), annualWithdrawals: aw, estate: last ? round2(last.remainingAssets) : 0 };
+
+  var monthlyDetails = simulateDistMonthly(total, etf, derived.retirementDate, totalMonths,
+    mcpi, ip, labIns, natPen, getGrossW);
+
+  var last = monthlyDetails[monthlyDetails.length - 1];
+  return {
+    totalRetirementAssets: round2(total),
+    monthlyDetails: monthlyDetails,
+    estate: last ? round2(last.endBalance) : 0
+  };
 }
 
 // ============================================================
@@ -1117,21 +1141,21 @@ function runCalculation() {
       '<div class="summary-item accent"><div class="label">退休總資產（含勞退+其他，入ETF後）</div><div class="value">$' + fmt(distResult.totalRetirementAssets) + '</div></div>'
       + '<div class="summary-item green"><div class="label">壽命結束時遺產</div><div class="value">$' + fmt(distResult.estate) + '</div></div>';
 
-    // Distribution table
+    // Distribution table (monthly)
     var tbody = document.getElementById('distTableBody');
     tbody.innerHTML = '';
-    for (var i = 0; i < distResult.annualWithdrawals.length; i++) {
-      var w = distResult.annualWithdrawals[i];
+    for (var i = 0; i < distResult.monthlyDetails.length; i++) {
+      var d = distResult.monthlyDetails[i];
       var tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + w.year + '</td>'
-        + '<td>$' + fmt(w.withdrawalAmount) + '</td>'
-        + '<td>$' + fmt(w.pvAtRetirement) + '</td>'
-        + '<td>$' + fmt(w.pvAtNow) + '</td>'
-        + '<td>$' + fmt(w.etfGrowth) + '</td>'
-        + '<td>$' + fmt(w.remainingAssets) + '</td>'
-        + '<td>$' + fmt(w.monthlyAvailable) + '</td>'
-        + '<td>$' + fmt(w.monthlyAvailablePVNow) + '</td>'
-        + '<td>$' + fmt(w.monthlyAvailablePV60) + '</td>';
+      tr.innerHTML = '<td>' + d.month + '</td>'
+        + '<td>' + d.calendarYear + '/' + d.calendarMonth + '</td>'
+        + '<td>$' + fmt(d.beginBalance) + '</td>'
+        + '<td>' + (d.withdrawal > 0 ? '$' + fmt(d.withdrawal) : '-') + '</td>'
+        + '<td>$' + fmt(d.cagrGrowth) + '</td>'
+        + '<td>' + (d.dividend > 0 ? '$' + fmt(d.dividend) : '-') + '</td>'
+        + '<td>$' + fmt(d.endBalance) + '</td>'
+        + '<td>$' + fmt(d.endBalancePVNow) + '</td>'
+        + '<td>$' + fmt(d.endBalancePV60) + '</td>';
       tbody.appendChild(tr);
     }
 
