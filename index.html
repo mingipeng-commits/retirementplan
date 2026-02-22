@@ -217,6 +217,21 @@
   .summary-item.accent .value { color: var(--accent); }
   .summary-item.green { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
   .summary-item.green .value { color: var(--success); }
+  .summary-block { grid-column: 1 / -1; }
+  .summary-block-title { font-size: 0.85rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 6px; }
+  .summary-block-title .total { font-size: 1.1rem; margin-left: 8px; }
+  .summary-sub-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .summary-sub-item {
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    color: var(--text);
+    border: 1px solid #e2e8f0;
+  }
+  .summary-sub-item .sub-label { color: var(--text-light); margin-bottom: 2px; }
+  .summary-sub-item .sub-value { font-weight: 700; font-size: 0.95rem; color: var(--primary-dark); }
+  .summary-sub-item .sub-detail { color: var(--text-light); font-size: 0.72rem; margin-top: 2px; }
   .error-msg { color: var(--danger); font-size: 0.9rem; margin: 8px 0; }
   .hidden { display: none; }
   #results { display: none; }
@@ -536,6 +551,7 @@ var ETF_CATALOG = [
 ];
 
 var CONFIDENCE_MULT = { high: 1.0, mid: 0.8, low: 0.6, 'very-low': 0.5 };
+var CONFIDENCE_NAMES = { high: '高', mid: '中', low: '低', 'very-low': '極低' };
 var MONTH_NAMES = ['','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
 // Age marker lines for charts (populated during calculation)
@@ -1768,6 +1784,7 @@ function runCalculation() {
     // Read Module A
     var lsList = document.getElementById('lumpSumList').children;
     var lumpSumTotal = 0;
+    var lumpSumDetails = [];
     for (var i = 0; i < lsList.length; i++) {
       var el = lsList[i];
       var idx = el.id.replace('ls', '');
@@ -1780,6 +1797,7 @@ function runCalculation() {
       };
       var simRes = simulateLumpSumDetailed(inv, basicSettings, derived);
       lumpSumTotal += simRes.finalValue;
+      lumpSumDetails.push({ etfId: inv.etf.id, confidence: inv.confidence, invested: inv.amount, finalValue: simRes.finalValue });
       lsSimResults[idx] = simRes;
       // Show toggle
       var toggle = document.getElementById('lsToggle' + idx);
@@ -1792,6 +1810,7 @@ function runCalculation() {
 
     var dcaListEl = document.getElementById('dcaList').children;
     var dcaTotal = 0;
+    var dcaDetails = [];
     for (var i = 0; i < dcaListEl.length; i++) {
       var el = dcaListEl[i];
       var idx = el.id.replace('dca', '');
@@ -1804,6 +1823,7 @@ function runCalculation() {
       };
       var simRes = simulateDCADetailed(inv, basicSettings, derived);
       dcaTotal += simRes.finalValue;
+      dcaDetails.push({ etfId: inv.etf.id, confidence: inv.confidence, monthlyAmount: inv.monthlyAmount, finalValue: simRes.finalValue });
       dcaSimResults[idx] = simRes;
       var toggle = document.getElementById('dcaToggle' + idx);
       if (toggle) toggle.style.display = 'block';
@@ -1814,7 +1834,9 @@ function runCalculation() {
 
     var accResult = {
       lumpSumTotal: lumpSumTotal,
+      lumpSumDetails: lumpSumDetails,
       dcaTotal: dcaTotal,
+      dcaDetails: dcaDetails,
       totalAtRetirement: lumpSumTotal + dcaTotal
     };
 
@@ -1948,10 +1970,36 @@ function runCalculation() {
       + '<div class="derived-item"><div class="label">月 CPI (MCPI)</div><div class="value">' + fmtPct(derived.monthlyCPI) + '</div></div>';
 
     // Accumulation
-    document.getElementById('accSummary').innerHTML =
-      '<div class="summary-item"><div class="label">一次性投入累積</div><div class="value">$' + fmt(accResult.lumpSumTotal) + '</div></div>'
-      + '<div class="summary-item"><div class="label">定期定額累積</div><div class="value">$' + fmt(accResult.dcaTotal) + '</div></div>'
-      + '<div class="summary-item accent"><div class="label">退休當下可分配財產</div><div class="value">$' + fmt(accResult.totalAtRetirement) + '</div></div>';
+    var accHtml = '';
+    // Lump sum block
+    accHtml += '<div class="summary-block"><div class="summary-block-title">一次性投入累積<span class="total">$' + fmt(accResult.lumpSumTotal) + '</span></div>';
+    if (accResult.lumpSumDetails.length > 0) {
+      accHtml += '<div class="summary-sub-list">';
+      for (var i = 0; i < accResult.lumpSumDetails.length; i++) {
+        var d = accResult.lumpSumDetails[i];
+        accHtml += '<div class="summary-sub-item"><div class="sub-label">' + d.etfId + '（' + CONFIDENCE_NAMES[d.confidence] + '）</div>'
+          + '<div class="sub-value">$' + fmt(d.finalValue) + '</div>'
+          + '<div class="sub-detail">投入 $' + fmt(d.invested) + '</div></div>';
+      }
+      accHtml += '</div>';
+    }
+    accHtml += '</div>';
+    // DCA block
+    accHtml += '<div class="summary-block"><div class="summary-block-title">定期定額累積<span class="total">$' + fmt(accResult.dcaTotal) + '</span></div>';
+    if (accResult.dcaDetails.length > 0) {
+      accHtml += '<div class="summary-sub-list">';
+      for (var i = 0; i < accResult.dcaDetails.length; i++) {
+        var d = accResult.dcaDetails[i];
+        accHtml += '<div class="summary-sub-item"><div class="sub-label">' + d.etfId + '（' + CONFIDENCE_NAMES[d.confidence] + '）</div>'
+          + '<div class="sub-value">$' + fmt(d.finalValue) + '</div>'
+          + '<div class="sub-detail">每月 $' + fmt(d.monthlyAmount) + '</div></div>';
+      }
+      accHtml += '</div>';
+    }
+    accHtml += '</div>';
+    // Total
+    accHtml += '<div class="summary-item accent"><div class="label">退休當下可分配財產</div><div class="value">$' + fmt(accResult.totalAtRetirement) + '</div></div>';
+    document.getElementById('accSummary').innerHTML = accHtml;
 
     // Distribution summary (breakdown)
     var preETF = accResult.totalAtRetirement + distSettings.laborPensionLumpSum + distSettings.otherAssets;
@@ -2033,7 +2081,7 @@ function exportPDF() {
   function kv(k, v) { return '<tr><td style="padding:4px 8px;color:#64748b;width:45%;border-bottom:1px solid #f1f5f9;">' + k + '</td><td style="padding:4px 8px;font-weight:600;border-bottom:1px solid #f1f5f9;">' + v + '</td></tr>'; }
   function kvTbl(rows) { return '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">' + rows + '</table>'; }
   var stratNames = { 'fixed-rate': '固定比率提領', 'increasing-rate': '遞增比率提領', 'constant-pv': '等現值提領' };
-  var confNames = { high: '高', mid: '中', low: '低' };
+  var confNames = CONFIDENCE_NAMES;
 
   // Build report HTML
   var h = '';
@@ -2065,11 +2113,18 @@ function exportPDF() {
 
   // Module A
   h += sect('Module A — 積累結果');
-  h += kvTbl(
-    kv('一次性投入累積', '$' + fmt(acc.lumpSumTotal))
-    + kv('定期定額累積', '$' + fmt(acc.dcaTotal))
-    + kv('退休當下可分配財產', '$' + fmt(acc.totalAtRetirement))
-  );
+  var accRows = kv('一次性投入累積', '$' + fmt(acc.lumpSumTotal));
+  for (var i = 0; i < acc.lumpSumDetails.length; i++) {
+    var d = acc.lumpSumDetails[i];
+    accRows += kv('  └ ' + d.etfId + '（' + confNames[d.confidence] + '）投入 $' + fmt(d.invested), '$' + fmt(d.finalValue));
+  }
+  accRows += kv('定期定額累積', '$' + fmt(acc.dcaTotal));
+  for (var i = 0; i < acc.dcaDetails.length; i++) {
+    var d = acc.dcaDetails[i];
+    accRows += kv('  └ ' + d.etfId + '（' + confNames[d.confidence] + '）每月 $' + fmt(d.monthlyAmount), '$' + fmt(d.finalValue));
+  }
+  accRows += kv('退休當下可分配財產', '$' + fmt(acc.totalAtRetirement));
+  h += kvTbl(accRows);
 
   // Module B
   h += sect('Module B — 分配結果');
