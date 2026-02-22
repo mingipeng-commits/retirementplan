@@ -307,6 +307,14 @@
         <label>選擇 ETF</label>
         <select id="retETFSelect" onchange="onRetETFChange()"></select>
       </div>
+      <div class="form-group">
+        <label>信心度</label>
+        <div class="confidence-group">
+          <label><input type="radio" name="retConf" value="high" checked>高</label>
+          <label><input type="radio" name="retConf" value="mid">中</label>
+          <label><input type="radio" name="retConf" value="low">低</label>
+        </div>
+      </div>
       <div id="retETFInfo" class="etf-info show" style="grid-column: 1/-1;"></div>
     </div>
 
@@ -1066,7 +1074,13 @@ function runCalculation() {
     // Read Module B
     var strategy = document.querySelector('input[name="strategy"]:checked').value;
     var wRate = parseFloat(document.getElementById('withdrawalRate').value) / 100;
-    var retETF = getETFById(document.getElementById('retETFSelect').value);
+    var retETFRaw = getETFById(document.getElementById('retETFSelect').value);
+    var retConfRadios = document.getElementsByName('retConf');
+    var retConf = 'high';
+    for (var rc = 0; rc < retConfRadios.length; rc++) {
+      if (retConfRadios[rc].checked) { retConf = retConfRadios[rc].value; break; }
+    }
+    var retETF = applyConfidence(retETFRaw, retConf);
 
     var distSettings = {
       strategy: strategy,
