@@ -408,7 +408,7 @@
       </div>
       <h3>資產餘額圖</h3>
       <div class="chart-container" style="max-height:350px;"><canvas id="chart_distBalance" height="300"></canvas></div>
-      <h3>提領金額圖</h3>
+      <h3>每月收入組成圖</h3>
       <div class="chart-container" style="max-height:350px;"><canvas id="chart_distWithdraw" height="300"></canvas></div>
     </div>
     <div class="btn-center">
@@ -693,7 +693,8 @@ function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns,
     // PV calculations: mfR = months from retirement, mfN = months from now
     var mfR = m;
     var mfN = ip + m;
-    var monthlyAvail = currentYearNetW / 12 + labIns + natPen;
+    var etfMonthly = currentYearNetW / 12;
+    var monthlyAvail = etfMonthly + labIns + natPen;
 
     details.push({
       month: m, calendarYear: cy, calendarMonth: cm, year: yearIdx,
@@ -706,7 +707,10 @@ function simulateDistMonthly(total, etf, retDate, totalMonths, mcpi, ip, labIns,
       endBalancePV60: round2(a / Math.pow(1 + mcpi, mfR)),
       monthlyAvailable: round2(monthlyAvail),
       monthlyAvailPVNow: round2(monthlyAvail / Math.pow(1 + mcpi, mfN)),
-      monthlyAvailPV60: round2(monthlyAvail / Math.pow(1 + mcpi, mfR))
+      monthlyAvailPV60: round2(monthlyAvail / Math.pow(1 + mcpi, mfR)),
+      monthlyETFWithdraw: round2(etfMonthly),
+      monthlyLaborIns: round2(labIns),
+      monthlyNatPen: round2(natPen)
     });
 
     cm++;
@@ -820,6 +824,9 @@ function computePreDistPhase(distS, basicS, derived) {
       monthlyAvailable: 0,
       monthlyAvailPVNow: 0,
       monthlyAvailPV60: 0,
+      monthlyETFWithdraw: 0,
+      monthlyLaborIns: 0,
+      monthlyNatPen: 0,
       isPreDist: true
     });
     cm++;
@@ -1124,7 +1131,7 @@ function renderDistributionCharts(monthlyDetails, ageLines) {
 
   var labels = [];
   var balNominal = [], balPVNow = [], balPV60 = [];
-  var wdNominal = [], wdPVNow = [], wdPV60 = [];
+  var wdETF = [], wdLabIns = [], wdNatPen = [];
 
   for (var i = 0; i < monthlyDetails.length; i++) {
     var d = monthlyDetails[i];
@@ -1132,9 +1139,9 @@ function renderDistributionCharts(monthlyDetails, ageLines) {
     balNominal.push(d.endBalance);
     balPVNow.push(d.endBalancePVNow);
     balPV60.push(d.endBalancePV60);
-    wdNominal.push(d.monthlyAvailable);
-    wdPVNow.push(d.monthlyAvailPVNow);
-    wdPV60.push(d.monthlyAvailPV60);
+    wdETF.push(d.monthlyETFWithdraw);
+    wdLabIns.push(d.monthlyLaborIns);
+    wdNatPen.push(d.monthlyNatPen);
   }
 
   var step = Math.max(1, Math.floor(labels.length / 24));
@@ -1179,26 +1186,51 @@ function renderDistributionCharts(monthlyDetails, ageLines) {
     }
   });
 
-  // --- Chart 2: Monthly Withdrawal ---
+  // --- Chart 2: Monthly Income Breakdown (stacked) ---
   destroyChart('distWithdraw');
   var canvas2 = document.getElementById('chart_distWithdraw');
   if (!canvas2) return;
+
+  var wdTooltipCb = {
+    title: function(items) {
+      var idx = items[0].dataIndex;
+      return items[0].label + ' — ' + ageAtIndex(globalAgeInfo.distStartMonths, idx);
+    },
+    label: function(ctx) {
+      return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+    },
+    afterBody: function(items) {
+      var total = 0;
+      for (var i = 0; i < items.length; i++) total += items[i].parsed.y;
+      return '合計: $' + total.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+    }
+  };
 
   chartInstances['distWithdraw'] = new Chart(canvas2.getContext('2d'), {
     type: 'line',
     data: {
       labels: labels,
       datasets: [
-        { label: '月可用金額', data: wdNominal, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 },
-        { label: 'PV@NOW', data: wdPVNow, borderColor: '#16a34a', borderWidth: 2, borderDash: [6, 3], pointRadius: 0, fill: false, tension: 0.3 },
-        { label: 'PV@60', data: wdPV60, borderColor: '#7c3aed', borderWidth: 2, borderDash: [2, 4], pointRadius: 0, fill: false, tension: 0.3 }
+        { label: 'ETF 提領(月)', data: wdETF, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.35)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+        { label: '勞保老年年金', data: wdLabIns, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.35)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+        { label: '國民年金', data: wdNatPen, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.35)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: { tooltip: { callbacks: tooltipCb }, legend: { position: 'top' }, verticalLines: { lines: ageLines || [] } },
-      scales: { x: xScale, y: yScale }
+      plugins: {
+        tooltip: { callbacks: wdTooltipCb },
+        legend: { position: 'top' },
+        verticalLines: { lines: ageLines || [] }
+      },
+      scales: {
+        x: xScale,
+        y: {
+          stacked: true,
+          ticks: { callback: function(val) { return '$' + val.toLocaleString('zh-TW', { maximumFractionDigits: 0 }); } }
+        }
+      }
     }
   });
 }
@@ -1322,7 +1354,6 @@ function runCalculation() {
     var retAge = basicSettings.retirementAge;
     var currentAgeMonths = Math.floor(calcMonthsDiff(basicSettings.birthDate, basicSettings.calculationDate));
     globalAgeInfo.accumStartMonths = currentAgeMonths;
-    globalAgeInfo.distStartMonths = currentAgeMonths + Math.floor(ip);
 
     // Module A markers (accumulation: months 1..ip, 0-based index = month-1)
     var accAge60Idx = Math.floor(monthsTo60) - 1;
@@ -1337,27 +1368,21 @@ function runCalculation() {
       globalAgeLines.accum.push({ index: accRetIdx, color: 'rgba(217,119,6,0.7)', label: retAge + '歲退休', bgColor: 'rgba(217,119,6,0.85)' });
     }
 
-    // Module B: build combined chart data starting from age 60
+    // Module B: build combined chart data starting from min(60, retAge)
+    var chartStartAge = Math.min(60, retAge);
     var preDistPhase = computePreDistPhase(distSettings, basicSettings, derived);
     var preLen = preDistPhase.length;
     var chartDistData;
     if (preLen > 0) {
-      // Retirement > 60: prepend pre-dist phase
+      // Retirement > 60: prepend pre-dist phase (chart starts at 60)
       chartDistData = preDistPhase.concat(distResult.monthlyDetails);
-    } else if (retAge < 60) {
-      // Retirement < 60: trim distribution to start from age 60
-      var monthsRetTo60 = Math.floor(calcMonthsDiff(derived.retirementDate, age60Date));
-      if (monthsRetTo60 > 0 && monthsRetTo60 < distResult.monthlyDetails.length) {
-        chartDistData = distResult.monthlyDetails.slice(monthsRetTo60);
-      } else {
-        chartDistData = distResult.monthlyDetails;
-      }
     } else {
+      // Retirement <= 60: chart starts at retirement age
       chartDistData = distResult.monthlyDetails;
     }
 
-    // Module B chart tooltip: chart always starts at age 60
-    globalAgeInfo.distStartMonths = 60 * 12;
+    // Module B chart tooltip: chart starts at min(60, retAge)
+    globalAgeInfo.distStartMonths = chartStartAge * 12;
 
     // Module B markers on combined chart
     globalAgeLines.dist = [];
@@ -1367,8 +1392,12 @@ function runCalculation() {
       globalAgeLines.dist.push({ index: 0, color: 'rgba(220,38,38,0.7)', label: '60歲', bgColor: 'rgba(220,38,38,0.85)' });
       globalAgeLines.dist.push({ index: preLen, color: 'rgba(217,119,6,0.7)', label: retAge + '歲退休', bgColor: 'rgba(217,119,6,0.85)' });
     } else {
-      // Retirement < 60: chart starts at 60, retirement already happened
-      globalAgeLines.dist.push({ index: 0, color: 'rgba(220,38,38,0.7)', label: '60歲', bgColor: 'rgba(220,38,38,0.85)' });
+      // Retirement < 60: chart starts at retirement, 60歲 marker later
+      globalAgeLines.dist.push({ index: 0, color: 'rgba(217,119,6,0.7)', label: retAge + '歲退休', bgColor: 'rgba(217,119,6,0.85)' });
+      var months60Idx = Math.floor(calcMonthsDiff(derived.retirementDate, age60Date)) - 1;
+      if (months60Idx >= 0 && months60Idx < chartDistData.length) {
+        globalAgeLines.dist.push({ index: months60Idx, color: 'rgba(220,38,38,0.7)', label: '60歲', bgColor: 'rgba(220,38,38,0.85)' });
+      }
     }
 
     // --- Render results ---
@@ -1523,7 +1552,7 @@ function exportPDF() {
     h += '<img src="' + chartBalSrc + '" style="width:100%;margin:4px 0 8px;" />';
   }
   if (chartWdSrc) {
-    h += sect('提領金額圖');
+    h += sect('每月收入組成圖');
     h += '<img src="' + chartWdSrc + '" style="width:100%;margin:4px 0 8px;" />';
   }
 
