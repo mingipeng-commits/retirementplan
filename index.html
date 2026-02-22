@@ -329,6 +329,7 @@
           <label><input type="radio" name="retConf" value="high" checked>高</label>
           <label><input type="radio" name="retConf" value="mid">中</label>
           <label><input type="radio" name="retConf" value="low">低</label>
+          <label><input type="radio" name="retConf" value="very-low">極低</label>
         </div>
       </div>
       <div id="retETFInfo" class="etf-info show" style="grid-column: 1/-1;"></div>
@@ -534,7 +535,7 @@ var ETF_CATALOG = [
   { id: '00713', name: '元大高息低波', yearsEstablished: 8.2, annualCAGR: 0.066, annualLAIR: 0.062, dividendMonths: [3, 6, 9, 12] }
 ];
 
-var CONFIDENCE_MULT = { high: 1.0, mid: 0.8, low: 0.6 };
+var CONFIDENCE_MULT = { high: 1.0, mid: 0.8, low: 0.6, 'very-low': 0.5 };
 var MONTH_NAMES = ['','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
 // Age marker lines for charts (populated during calculation)
@@ -1110,6 +1111,7 @@ function confidenceHTML(prefix, idx) {
     '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="high" checked>高</label>' +
     '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="mid">中</label>' +
     '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="low">低</label>' +
+    '<label><input type="radio" name="' + prefix + 'Conf' + idx + '" value="very-low">極低</label>' +
     '</div>';
 }
 
