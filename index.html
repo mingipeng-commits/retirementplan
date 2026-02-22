@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>退休計算機</title>
+<title>退休規劃系統 2.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -29,13 +29,24 @@
     line-height: 1.6;
   }
   .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  h1 {
-    text-align: center;
-    font-size: 1.8rem;
-    margin: 20px 0 10px;
-    color: var(--primary-dark);
+  .site-header {
+    background: var(--primary-dark);
+    padding: 32px 20px 24px;
+    margin-bottom: 0;
   }
-  .subtitle { text-align: center; color: var(--text-light); margin-bottom: 30px; }
+  .site-header h1 {
+    text-align: center;
+    font-size: 2.4rem;
+    margin: 0 0 8px;
+    color: #ffffff;
+  }
+  .site-header .subtitle {
+    text-align: center;
+    color: rgba(255,255,255,0.85);
+    font-weight: 700;
+    margin: 0;
+    font-size: 1rem;
+  }
   .card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -261,9 +272,11 @@
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>退休計算機</h1>
+<div class="site-header">
+  <h1>退休規劃系統 2.0</h1>
   <p class="subtitle">模擬被動式 ETF 指數基金的退休金積累與分配計畫</p>
+</div>
+<div class="container">
 
   <!-- ETF 商品總覽 -->
   <div class="card">
@@ -2191,7 +2204,7 @@ function exportPDF() {
   // Build report HTML
   var h = '';
   h += '<div style="text-align:center;margin-bottom:20px;">';
-  h += '<h1 style="font-size:22px;color:#1d4ed8;margin:0 0 4px;">退休計劃報告</h1>';
+  h += '<h1 style="font-size:22px;color:#1d4ed8;margin:0 0 4px;">退休規劃系統 2.0 — 報告</h1>';
   h += '<p style="color:#64748b;font-size:11px;margin:0;">產生日期: ' + new Date().toLocaleDateString('zh-TW') + '</p>';
   h += '</div>';
 
@@ -2338,7 +2351,7 @@ function exportPDF() {
       }
     }
 
-    pdf.save('退休計劃報告.pdf');
+    pdf.save('退休規劃報告.pdf');
     btn.textContent = '匯出 PDF 報告';
     btn.disabled = false;
   }).catch(function(err) {
