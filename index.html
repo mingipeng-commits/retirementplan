@@ -2283,12 +2283,12 @@ function exportPDF() {
   // Annual summary table
   h += sect('年度分配摘要');
   h += '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
-  h += '<thead><tr>';
+  h += '<tr>';
   var ths = ['年度', '年提領（名目）', '提領PV@NOW', '提領PV@60', '年末餘額（名目）', '餘額PV@NOW', '餘額PV@60'];
   for (var ti = 0; ti < ths.length; ti++) {
-    h += '<th style="padding:6px 4px;text-align:right;border-bottom:2px solid #94a3b8;background:#e2e8f0;color:#1e293b;font-weight:700;font-size:11px;">' + ths[ti] + '</th>';
+    h += '<td style="padding:6px 4px;text-align:right;border-bottom:2px solid #94a3b8;background:#e2e8f0;color:#1e293b;font-weight:700;font-size:11px;">' + ths[ti] + '</td>';
   }
-  h += '</tr></thead><tbody>';
+  h += '</tr>';
 
   var md = dr.monthlyDetails;
   var ipFloor = Math.floor(dv.investmentPeriodMonths);
@@ -2314,7 +2314,7 @@ function exportPDF() {
     h += '<td style="padding:3px;text-align:right;border-bottom:1px solid #e2e8f0;">$' + fmt(endRow.endBalancePV60) + '</td>';
     h += '</tr>';
   }
-  h += '</tbody></table>';
+  h += '</table>';
 
   // Create off-screen report element
   var rpt = document.createElement('div');
