@@ -1960,8 +1960,7 @@ function runCalculation() {
   // Reset previous detail renders
   lsSimResults = {};
   dcaSimResults = {};
-  for (var ck in chartInstances) { chartInstances[ck].destroy(); }
-  chartInstances = {};
+  for (var ck in chartInstances) { if (ck !== 'blra') { chartInstances[ck].destroy(); delete chartInstances[ck]; } }
 
   try {
     // Read basic settings
