@@ -262,6 +262,30 @@
   }
   .etf-catalog th { background: #ede9fe; color: var(--accent); text-align: center; }
   .etf-catalog td { text-align: center; }
+  .etf-catalog tr.custom-etf-row { background: #faf5ff; }
+  .etf-catalog .custom-actions { display: flex; gap: 4px; justify-content: center; }
+  .etf-catalog .custom-actions button { padding: 2px 8px; font-size: 0.75rem; border: none; border-radius: 4px; cursor: pointer; }
+  .btn-edit-etf { background: var(--primary); color: #fff; }
+  .btn-delete-etf { background: var(--danger); color: #fff; }
+
+  /* Custom ETF Modal */
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: #fff; border-radius: 12px; padding: 28px; width: 90%; max-width: 440px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  }
+  .modal-box h3 { margin: 0 0 16px; color: var(--primary-dark); font-size: 1.1rem; }
+  .modal-box .form-group { margin-bottom: 12px; }
+  .modal-box .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .modal-box .btn-cancel { background: #e2e8f0; color: var(--text); }
+  .modal-box .btn-cancel:hover { background: #cbd5e1; }
+
+  /* Dividend frequency select */
+  .freq-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; width: 100%; }
 
   @media (max-width: 600px) {
     .form-grid { grid-template-columns: 1fr; }
@@ -291,10 +315,47 @@
             <th>股價 CAGR</th>
             <th>年配息率</th>
             <th>配息月份</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody id="etfCatalogBody"></tbody>
       </table>
+    </div>
+    <button class="btn btn-sm btn-success" onclick="openCustomETFModal()">+ 自訂 ETF 產品</button>
+  </div>
+
+  <!-- Custom ETF Modal -->
+  <div id="customETFModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3 id="customETFModalTitle">自訂 ETF 產品</h3>
+      <input type="hidden" id="customETFEditId">
+      <div class="form-group">
+        <label>ETF 名稱</label>
+        <input type="text" id="customETFName" placeholder="例：我的自訂 ETF">
+      </div>
+      <div class="form-group">
+        <label>股價 CAGR (%)</label>
+        <input type="text" inputmode="decimal" id="customETFCAGR" placeholder="例：8.5">
+        <span class="hint">年化資本利得成長率</span>
+      </div>
+      <div class="form-group">
+        <label>年配息率 (%)</label>
+        <input type="text" inputmode="decimal" id="customETFLAIR" placeholder="例：4.0">
+        <span class="hint">年均配息率</span>
+      </div>
+      <div class="form-group">
+        <label>年配息次數</label>
+        <select id="customETFFreq" class="freq-select">
+          <option value="1">1 次（年配）</option>
+          <option value="2">2 次（半年配）</option>
+          <option value="4" selected>4 次（季配）</option>
+          <option value="12">12 次（月配）</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-sm btn-cancel" onclick="closeCustomETFModal()">取消</button>
+        <button class="btn btn-sm btn-primary" onclick="saveCustomETF()">儲存</button>
+      </div>
     </div>
   </div>
 
@@ -566,19 +627,235 @@
 // ETF 商品型錄
 // ============================================================
 var ETF_CATALOG = [
-  { id: '0050', name: '元大台灣 50', yearsEstablished: 22, annualCAGR: 0.0785, annualLAIR: 0.031, dividendMonths: [1, 7] },
-  { id: '006208', name: '富邦台 50', yearsEstablished: 13, annualCAGR: 0.1052, annualLAIR: 0.032, dividendMonths: [1, 7] },
+  { id: '0050', name: '元大台灣 50', yearsEstablished: 22.6, annualCAGR: 0.0945, annualLAIR: 0.0319, dividendMonths: [1, 7] },
+  { id: '006208', name: '富邦台 50', yearsEstablished: 13.5, annualCAGR: 0.1355, annualLAIR: 0.0308, dividendMonths: [7, 11] },
   { id: '0051', name: '元大中型 100', yearsEstablished: 19, annualCAGR: 0.0715, annualLAIR: 0.0305, dividendMonths: [11] },
   { id: '006204', name: '永豐臺灣加權', yearsEstablished: 14, annualCAGR: 0.092, annualLAIR: 0.034, dividendMonths: [10] },
-  { id: '0056', name: '元大高股息', yearsEstablished: 18, annualCAGR: 0.021, annualLAIR: 0.069, dividendMonths: [1, 4, 7, 10] },
-  { id: '00878', name: '國泰永續高股息', yearsEstablished: 5.5, annualCAGR: 0.07, annualLAIR: 0.055, dividendMonths: [2, 5, 8, 11] },
-  { id: '00713', name: '元大高息低波', yearsEstablished: 8.2, annualCAGR: 0.066, annualLAIR: 0.062, dividendMonths: [3, 6, 9, 12] },
-  { id: '00919', name: '群益台灣精選高息', yearsEstablished: 3.2, annualCAGR: 0.135, annualLAIR: 0.095, dividendMonths: [3, 6, 9, 12] }
+  { id: '0056', name: '元大高股息', yearsEstablished: 18.1, annualCAGR: 0.0222, annualLAIR: 0.0565, dividendMonths: [1, 4, 7, 10] },
+  { id: '00878', name: '國泰永續高股息', yearsEstablished: 5.5, annualCAGR: 0.0746, annualLAIR: 0.0602, dividendMonths: [2, 5, 8, 11] },
+  { id: '00713', name: '元大高息低波', yearsEstablished: 8.3, annualCAGR: 0.0673, annualLAIR: 0.0668, dividendMonths: [3, 6, 9, 12] },
+  { id: '00919', name: '群益台灣精選高息', yearsEstablished: 3.3, annualCAGR: 0.1473, annualLAIR: 0.1012, dividendMonths: [3, 6, 9, 12] }
 ];
 
 var CONFIDENCE_MULT = { high: 1.0, mid: 0.8, low: 0.6, 'very-low': 0.5 };
 var CONFIDENCE_NAMES = { high: '高', mid: '中', low: '低', 'very-low': '極低' };
 var MONTH_NAMES = ['','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+// ============================================================
+// Custom ETF Management (localStorage)
+// ============================================================
+var CUSTOM_ETF_STORAGE_KEY = 'retirementPlan_customETFs';
+
+function loadCustomETFs() {
+  try {
+    var raw = localStorage.getItem(CUSTOM_ETF_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return [];
+}
+
+function saveCustomETFsToStorage(list) {
+  localStorage.setItem(CUSTOM_ETF_STORAGE_KEY, JSON.stringify(list));
+}
+
+function generateDividendMonths(freq) {
+  freq = parseInt(freq);
+  if (freq === 1) return [7];
+  if (freq === 2) return [1, 7];
+  if (freq === 4) return [1, 4, 7, 10];
+  if (freq === 12) return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  return [1, 4, 7, 10];
+}
+
+function freqFromDividendMonths(months) {
+  if (!months) return 4;
+  return months.length;
+}
+
+function addCustomETFToCatalog(etf) {
+  // Avoid duplicate
+  for (var i = 0; i < ETF_CATALOG.length; i++) {
+    if (ETF_CATALOG[i].id === etf.id) return;
+  }
+  ETF_CATALOG.push(etf);
+}
+
+function removeCustomETFFromCatalog(id) {
+  ETF_CATALOG = ETF_CATALOG.filter(function(e) { return e.id !== id; });
+}
+
+function initCustomETFs() {
+  var customs = loadCustomETFs();
+  for (var i = 0; i < customs.length; i++) {
+    addCustomETFToCatalog(customs[i]);
+  }
+}
+
+function isCustomETF(id) {
+  var customs = loadCustomETFs();
+  for (var i = 0; i < customs.length; i++) {
+    if (customs[i].id === id) return true;
+  }
+  return false;
+}
+
+function openCustomETFModal(editId) {
+  var modal = document.getElementById('customETFModal');
+  var titleEl = document.getElementById('customETFModalTitle');
+  var editIdEl = document.getElementById('customETFEditId');
+  var nameEl = document.getElementById('customETFName');
+  var cagrEl = document.getElementById('customETFCAGR');
+  var lairEl = document.getElementById('customETFLAIR');
+  var freqEl = document.getElementById('customETFFreq');
+
+  if (editId) {
+    titleEl.textContent = '編輯自訂 ETF';
+    editIdEl.value = editId;
+    var etf = getETFById(editId);
+    nameEl.value = etf.name;
+    cagrEl.value = (etf.annualCAGR * 100).toFixed(2);
+    lairEl.value = (etf.annualLAIR * 100).toFixed(2);
+    freqEl.value = freqFromDividendMonths(etf.dividendMonths);
+  } else {
+    titleEl.textContent = '自訂 ETF 產品';
+    editIdEl.value = '';
+    nameEl.value = '';
+    cagrEl.value = '';
+    lairEl.value = '';
+    freqEl.value = '4';
+  }
+  modal.classList.add('show');
+}
+
+function closeCustomETFModal() {
+  document.getElementById('customETFModal').classList.remove('show');
+}
+
+function saveCustomETF() {
+  var editId = document.getElementById('customETFEditId').value;
+  var name = document.getElementById('customETFName').value.trim();
+  var cagrVal = parseFloat(document.getElementById('customETFCAGR').value);
+  var lairVal = parseFloat(document.getElementById('customETFLAIR').value);
+  var freq = document.getElementById('customETFFreq').value;
+
+  if (!name) { alert('請輸入 ETF 名稱'); return; }
+  if (isNaN(cagrVal)) { alert('請輸入有效的股價 CAGR'); return; }
+  if (isNaN(lairVal)) { alert('請輸入有效的年配息率'); return; }
+
+  var customs = loadCustomETFs();
+  var dividendMonths = generateDividendMonths(freq);
+
+  if (editId) {
+    // Update existing
+    for (var i = 0; i < customs.length; i++) {
+      if (customs[i].id === editId) {
+        customs[i].name = name;
+        customs[i].annualCAGR = cagrVal / 100;
+        customs[i].annualLAIR = lairVal / 100;
+        customs[i].dividendMonths = dividendMonths;
+        break;
+      }
+    }
+    // Update in ETF_CATALOG
+    for (var i = 0; i < ETF_CATALOG.length; i++) {
+      if (ETF_CATALOG[i].id === editId) {
+        ETF_CATALOG[i].name = name;
+        ETF_CATALOG[i].annualCAGR = cagrVal / 100;
+        ETF_CATALOG[i].annualLAIR = lairVal / 100;
+        ETF_CATALOG[i].dividendMonths = dividendMonths;
+        break;
+      }
+    }
+  } else {
+    // New custom ETF - generate unique ID
+    var newId = 'CUSTOM-' + Date.now();
+    var newETF = {
+      id: newId,
+      name: name,
+      yearsEstablished: 0,
+      annualCAGR: cagrVal / 100,
+      annualLAIR: lairVal / 100,
+      dividendMonths: dividendMonths,
+      isCustom: true
+    };
+    customs.push(newETF);
+    addCustomETFToCatalog(newETF);
+  }
+
+  saveCustomETFsToStorage(customs);
+  closeCustomETFModal();
+  refreshETFUI();
+}
+
+function deleteCustomETF(id) {
+  if (!confirm('確定刪除此自訂 ETF 產品？')) return;
+  var customs = loadCustomETFs();
+  customs = customs.filter(function(e) { return e.id !== id; });
+  saveCustomETFsToStorage(customs);
+  removeCustomETFFromCatalog(id);
+  refreshETFUI();
+}
+
+function refreshETFUI() {
+  // Re-render catalog table
+  var tbody = document.getElementById('etfCatalogBody');
+  tbody.innerHTML = '';
+  for (var i = 0; i < ETF_CATALOG.length; i++) {
+    var e = ETF_CATALOG[i];
+    var tr = document.createElement('tr');
+    var custom = isCustomETF(e.id);
+    if (custom) tr.className = 'custom-etf-row';
+    var actionsHTML = '';
+    if (custom) {
+      actionsHTML = '<div class="custom-actions">' +
+        '<button class="btn-edit-etf" onclick="openCustomETFModal(\'' + e.id + '\')">編輯</button>' +
+        '<button class="btn-delete-etf" onclick="deleteCustomETF(\'' + e.id + '\')">刪除</button>' +
+        '</div>';
+    }
+    tr.innerHTML = '<td><strong>' + e.id + (custom ? ' (自訂)' : '') + '</strong></td>'
+      + '<td>' + e.name + '</td>'
+      + '<td>' + (e.yearsEstablished > 0 ? e.yearsEstablished + ' 年' : '—') + '</td>'
+      + '<td>' + (e.annualCAGR * 100).toFixed(2) + '%</td>'
+      + '<td>' + (e.annualLAIR * 100).toFixed(2) + '%</td>'
+      + '<td>' + etfMonthsStr(e.dividendMonths) + '</td>'
+      + '<td>' + actionsHTML + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  // Re-populate all ETF dropdowns (retirement ETF + any existing investment rows)
+  refreshETFDropdown('retETFSelect');
+  // Refresh investment dropdowns
+  var lsList = document.getElementById('lumpSumList').children;
+  for (var i = 0; i < lsList.length; i++) {
+    var idx = lsList[i].id.replace('ls', '');
+    refreshETFDropdown('lsEtf' + idx);
+  }
+  var dcaListEl = document.getElementById('dcaList').children;
+  for (var i = 0; i < dcaListEl.length; i++) {
+    var idx = dcaListEl[i].id.replace('dca', '');
+    refreshETFDropdown('dcaEtf' + idx);
+  }
+}
+
+function refreshETFDropdown(selectId) {
+  var sel = document.getElementById(selectId);
+  if (!sel) return;
+  var currentVal = sel.value;
+  sel.innerHTML = '';
+  for (var i = 0; i < ETF_CATALOG.length; i++) {
+    var e = ETF_CATALOG[i];
+    var opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = e.id + (isCustomETF(e.id) ? ' (自訂) ' : ' ') + e.name;
+    sel.appendChild(opt);
+  }
+  // Restore selection if possible
+  var found = false;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === currentVal) { sel.value = currentVal; found = true; break; }
+  }
+  if (!found && sel.options.length > 0) sel.value = sel.options[0].value;
+}
 
 // Age marker lines for charts (populated during calculation)
 var globalAgeLines = { accum: [], dist: [] };
@@ -641,11 +918,17 @@ function etfMonthsStr(months) {
 }
 
 function etfInfoHTML(etf) {
-  return etf.id + ' ' + etf.name +
+  var info = etf.id + ' ' + etf.name +
     ' | CAGR: ' + (etf.annualCAGR * 100).toFixed(2) + '%' +
     ' | 配息率: ' + (etf.annualLAIR * 100).toFixed(2) + '%' +
-    ' | 配息: ' + etfMonthsStr(etf.dividendMonths) +
-    ' | 成立: ' + etf.yearsEstablished + '年';
+    ' | 配息: ' + etfMonthsStr(etf.dividendMonths);
+  if (etf.yearsEstablished > 0) {
+    info += ' | 成立: ' + etf.yearsEstablished + '年';
+  }
+  if (isCustomETF(etf.id)) {
+    info += ' (自訂)';
+  }
+  return info;
 }
 
 // ============================================================
@@ -1184,7 +1467,7 @@ function etfSelectHTML(prefix, idx) {
   var html = '<select id="' + prefix + 'Etf' + idx + '" onchange="onInvETFChange(\'' + prefix + '\',' + idx + ')">';
   for (var i = 0; i < ETF_CATALOG.length; i++) {
     var e = ETF_CATALOG[i];
-    html += '<option value="' + e.id + '">' + e.id + ' ' + e.name + '</option>';
+    html += '<option value="' + e.id + '">' + e.id + (isCustomETF(e.id) ? ' (自訂) ' : ' ') + e.name + '</option>';
   }
   html += '</select>';
   return html;
@@ -1249,6 +1532,8 @@ function onInvETFChange(prefix, idx) {
     var etf = getETFById(sel.value);
     infoEl.textContent = etfInfoHTML(etf);
   }
+  // Disable confidence if custom ETF selected
+  updateConfidenceState(prefix + 'Conf' + idx, sel ? sel.value : '');
 }
 
 function onRetETFChange() {
@@ -1257,6 +1542,35 @@ function onRetETFChange() {
   if (sel && infoEl) {
     var etf = getETFById(sel.value);
     infoEl.textContent = etfInfoHTML(etf);
+  }
+  // Disable confidence if custom ETF selected
+  updateConfidenceState('retConf', sel ? sel.value : '');
+}
+
+function updateConfidenceState(radioName, etfId) {
+  var radios = document.getElementsByName(radioName);
+  var custom = isCustomETF(etfId);
+  for (var i = 0; i < radios.length; i++) {
+    radios[i].disabled = custom;
+    if (custom) {
+      radios[i].checked = radios[i].value === 'high';
+    }
+  }
+  // Find the parent confidence-group and add a visual hint
+  if (radios.length > 0) {
+    var parent = radios[0].closest('.confidence-group');
+    if (parent) {
+      var hint = parent.nextElementSibling;
+      if (hint && hint.classList.contains('confidence-hint')) {
+        if (custom) {
+          hint.textContent = '自訂 ETF：信心度固定為 100%（使用您輸入的數值）';
+          hint.style.color = 'var(--accent)';
+        } else {
+          hint.textContent = '高 100% / 中 80% / 低 60% / 極低 50%';
+          hint.style.color = '';
+        }
+      }
+    }
   }
 }
 
@@ -2483,29 +2797,12 @@ function exportPDF() {
   var d = String(today.getDate()).padStart(2, '0');
   document.getElementById('calcDate').value = y + '-' + m + '-' + d;
 
-  // Render ETF catalog table
-  var tbody = document.getElementById('etfCatalogBody');
-  for (var i = 0; i < ETF_CATALOG.length; i++) {
-    var e = ETF_CATALOG[i];
-    var tr = document.createElement('tr');
-    tr.innerHTML = '<td><strong>' + e.id + '</strong></td>'
-      + '<td>' + e.name + '</td>'
-      + '<td>' + e.yearsEstablished + ' 年</td>'
-      + '<td>' + (e.annualCAGR * 100).toFixed(2) + '%</td>'
-      + '<td>' + (e.annualLAIR * 100).toFixed(2) + '%</td>'
-      + '<td>' + etfMonthsStr(e.dividendMonths) + '</td>';
-    tbody.appendChild(tr);
-  }
+  // Load custom ETFs from localStorage into ETF_CATALOG
+  initCustomETFs();
 
-  // Populate retirement ETF dropdown
-  var retSel = document.getElementById('retETFSelect');
-  for (var i = 0; i < ETF_CATALOG.length; i++) {
-    var e = ETF_CATALOG[i];
-    var opt = document.createElement('option');
-    opt.value = e.id;
-    opt.textContent = e.id + ' ' + e.name;
-    retSel.appendChild(opt);
-  }
+  // Render ETF catalog table and all dropdowns
+  refreshETFUI();
+
   onRetETFChange();
 
   // Add default investments
