@@ -304,24 +304,31 @@
 
   <!-- ETF 商品總覽 -->
   <div class="card">
-    <h2>ETF 商品總覽</h2>
-    <div class="etf-catalog">
-      <table>
-        <thead>
-          <tr>
-            <th>代號</th>
-            <th>名稱</th>
-            <th>成立年期</th>
-            <th>股價 CAGR</th>
-            <th>年配息率</th>
-            <th>配息月份</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="etfCatalogBody"></tbody>
-      </table>
+    <h2 style="display:flex; align-items:center; justify-content:space-between;">
+      ETF 商品總覽
+      <button class="btn btn-sm" id="etfCatalogToggleBtn" onclick="toggleETFCatalog()" style="font-size:0.85rem; padding:6px 14px;">
+        &#9654; 展開商品列表
+      </button>
+    </h2>
+    <div id="etfCatalogWrapper" style="display:none;">
+      <div class="etf-catalog">
+        <table>
+          <thead>
+            <tr>
+              <th>代號</th>
+              <th>名稱</th>
+              <th>成立年期</th>
+              <th>股價 CAGR</th>
+              <th>年配息率</th>
+              <th>配息月份</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="etfCatalogBody"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-sm btn-success" onclick="openCustomETFModal()">+ 自訂 ETF 產品</button>
     </div>
-    <button class="btn btn-sm btn-success" onclick="openCustomETFModal()">+ 自訂 ETF 產品</button>
   </div>
 
   <!-- Custom ETF Modal -->
@@ -634,12 +641,38 @@ var ETF_CATALOG = [
   { id: '0056', name: '元大高股息', yearsEstablished: 18.1, annualCAGR: 0.0222, annualLAIR: 0.0565, dividendMonths: [1, 4, 7, 10] },
   { id: '00878', name: '國泰永續高股息', yearsEstablished: 5.5, annualCAGR: 0.0746, annualLAIR: 0.0602, dividendMonths: [2, 5, 8, 11] },
   { id: '00713', name: '元大高息低波', yearsEstablished: 8.3, annualCAGR: 0.0673, annualLAIR: 0.0668, dividendMonths: [3, 6, 9, 12] },
-  { id: '00919', name: '群益台灣精選高息', yearsEstablished: 3.3, annualCAGR: 0.1473, annualLAIR: 0.1012, dividendMonths: [3, 6, 9, 12] }
+  { id: '00919', name: '群益台灣精選高息', yearsEstablished: 3.3, annualCAGR: 0.1473, annualLAIR: 0.1012, dividendMonths: [3, 6, 9, 12] },
+  // US ETFs
+  { id: 'SPY', name: 'SPDR S&P 500 ETF Trust', yearsEstablished: 33.1, annualCAGR: 0.0844, annualLAIR: 0.0145, dividendMonths: [3, 6, 9, 12] },
+  { id: 'IVV', name: 'iShares Core S&P 500 ETF', yearsEstablished: 25.8, annualCAGR: 0.0760, annualLAIR: 0.0150, dividendMonths: [3, 6, 9, 12] },
+  { id: 'VOO', name: 'Vanguard S&P 500 ETF', yearsEstablished: 15.5, annualCAGR: 0.1185, annualLAIR: 0.0150, dividendMonths: [3, 6, 9, 12] },
+  { id: 'VTI', name: 'Vanguard Total Stock Market ETF', yearsEstablished: 24.8, annualCAGR: 0.0865, annualLAIR: 0.0155, dividendMonths: [3, 6, 9, 12] },
+  { id: 'ITOT', name: 'iShares Core S&P Total U.S. Stock Market ETF', yearsEstablished: 22.1, annualCAGR: 0.0910, annualLAIR: 0.0155, dividendMonths: [3, 6, 9, 12] },
+  { id: 'SCHB', name: 'Schwab U.S. Broad Market ETF', yearsEstablished: 16.3, annualCAGR: 0.1120, annualLAIR: 0.0155, dividendMonths: [3, 6, 9, 12] },
+  { id: 'VTHR', name: 'Vanguard Russell 3000 ETF', yearsEstablished: 15.4, annualCAGR: 0.1150, annualLAIR: 0.0145, dividendMonths: [3, 6, 9, 12] },
+  { id: 'QQQ', name: 'Invesco QQQ Trust', yearsEstablished: 27.0, annualCAGR: 0.0960, annualLAIR: 0.0060, dividendMonths: [3, 6, 9, 12] },
+  { id: 'VUG', name: 'Vanguard Growth ETF', yearsEstablished: 22.1, annualCAGR: 0.1080, annualLAIR: 0.0060, dividendMonths: [3, 6, 9, 12] },
+  { id: 'VT', name: 'Vanguard Total World Stock ETF', yearsEstablished: 17.7, annualCAGR: 0.0680, annualLAIR: 0.0210, dividendMonths: [3, 6, 9, 12] }
 ];
 
 var CONFIDENCE_MULT = { high: 1.0, mid: 0.8, low: 0.6, 'very-low': 0.5 };
 var CONFIDENCE_NAMES = { high: '高', mid: '中', low: '低', 'very-low': '極低' };
 var MONTH_NAMES = ['','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+// ============================================================
+// ETF Catalog Toggle (collapsible)
+// ============================================================
+function toggleETFCatalog() {
+  var wrapper = document.getElementById('etfCatalogWrapper');
+  var btn = document.getElementById('etfCatalogToggleBtn');
+  if (wrapper.style.display === 'none') {
+    wrapper.style.display = 'block';
+    btn.innerHTML = '&#9660; 收合商品列表';
+  } else {
+    wrapper.style.display = 'none';
+    btn.innerHTML = '&#9654; 展開商品列表';
+  }
+}
 
 // ============================================================
 // Custom ETF Management (localStorage)
